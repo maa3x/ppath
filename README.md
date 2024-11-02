@@ -28,12 +28,11 @@ func main() {
   p := path.New("/Users/matrix/Code/go/projects")
   p = p.Join("path", "README.md")
 
-  exists, err := p.Exists()
-  if err != nil {
-    log.Fatal(err)
+  if !p.IsExist() {
+    log.Fatal("README.md not found!")
   }
 
-  p2 := p.NthParent(2).Join("copy")
+  p2 := p.NthParent(2).Join("clone")
   if err := p.Dir().Copy(p2); err != nil {
     log.Fatal(err)
   }
