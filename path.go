@@ -160,7 +160,7 @@ func (p Path) IsDir() bool {
 }
 
 func (p Path) IsSymlink() bool {
-	fi, err := p.Stat()
+	fi, err := os.Lstat(string(p))
 	if err != nil {
 		return false
 	}
