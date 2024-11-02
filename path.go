@@ -127,8 +127,8 @@ func (p Path) ReadFile() ([]byte, error) {
 	return os.ReadFile(string(p))
 }
 
-func (p Path) WriteFile(data []byte, perm os.FileMode) error {
-	return os.WriteFile(string(p), data, perm)
+func (p Path) WriteFile(data []byte) error {
+	return os.WriteFile(string(p), data, 0o644)
 }
 
 func (p Path) IsAbs() bool {
