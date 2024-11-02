@@ -195,8 +195,8 @@ func TestIsDev(t *testing.T) {
 	// It is generally difficult to create a device file in a cross-platform manner.
 	// Therefore, this test is more of a placeholder to illustrate the usage.
 	// On Unix-like systems, you might need root privileges to create a device file.
-	if runtime.GOOS != "windows" {
-		t.Skip("skipping test on non-Windows systems")
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping test on Windows systems")
 	}
 
 	// Example of a device file on Unix-like systems (this will not work on Windows)
