@@ -8,6 +8,8 @@ import (
 	"testing"
 )
 
+var testContent = []byte("test content")
+
 func errorIf(t *testing.T, err error) {
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -121,18 +123,121 @@ func TestRename(t *testing.T) {
 }
 
 func TestCopy(t *testing.T) {
-	src := New("srcfile.txt")
-	dst := New("dstfile.txt")
-	os.WriteFile(src.String(), []byte("test"), 0o644)
-	err := src.Copy(dst)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-	if !dst.IsExist() {
-		t.Errorf("expected file to be copied")
-	}
-	os.Remove(src.String())
-	os.Remove(dst.String())
+	t.Run("CopyFileToFile", func(t *testing.T) {
+		src := New("srcfile.txt")
+		dst := New("dstfile.txt")
+		if err := src.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		defer os.Remove(src.String())
+
+		if err := src.Copy(dst); err != nil {
+			t.Fatalf("Copy: %v", err)
+		}
+		defer os.Remove(dst.String())
+
+		dstContent, err := dst.ReadFile()
+		if err != nil {
+			t.Fatalf("ReadFile: %v", err)
+		}
+		if string(dstContent) != string(testContent) {
+			t.Errorf("expected %s, got %s", testContent, dstContent)
+		}
+	})
+
+	t.Run("CopyFileToDirectory", func(t *testing.T) {
+		src := New("srcfile.txt")
+		if err := src.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		defer src.Delete()
+
+		dst := New("dstdir", "dstfile.txt")
+		if err := src.Copy(dst); err != nil {
+			t.Fatalf("Copy: %v", err)
+		}
+		defer dst.Delete()
+
+		dstContent, err := dst.ReadFile()
+		if err != nil {
+			t.Fatalf("ReadFile: %v", err)
+		}
+		if string(dstContent) != string(testContent) {
+			t.Errorf("expected %s, got %s", testContent, dstContent)
+		}
+	})
+
+	t.Run("CopyDirectoryToDirectory", func(t *testing.T) {
+		src := New("srcdir")
+		if err := src.MkdirIfNotExist(); err != nil {
+			t.Fatalf("MkdirIfNotExist: %v", err)
+		}
+		defer src.Delete()
+
+		f1 := src.Join("file1.txt")
+		if err := f1.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		f2 := src.Join("file2.txt")
+		if err := f2.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+
+		dstDir := New("dstdir")
+		defer dstDir.Delete()
+
+		if err := src.Copy(dstDir); err != nil {
+			t.Fatalf("Copy: %v", err)
+		}
+
+		dstContent1, err := dstDir.Join("file1.txt").ReadFile()
+		if err != nil {
+			t.Fatalf("ReadFile: %v", err)
+		}
+		if string(dstContent1) != string(testContent) {
+			t.Errorf("expected %s, got %s", testContent, dstContent1)
+		}
+
+		dstContent2, err := dstDir.Join("file2.txt").ReadFile()
+		if err != nil {
+			t.Fatalf("ReadFile: %v", err)
+		}
+		if string(dstContent2) != string(testContent) {
+			t.Errorf("expected %s, got %s", testContent, dstContent2)
+		}
+	})
+
+	t.Run("CopyDirectoryToExistingDirectory", func(t *testing.T) {
+		srcDir := New("srcdir")
+		dstDir := New("dstdir")
+		if err := srcDir.MkdirIfNotExist(); err != nil {
+			t.Fatalf("MkdirIfNotExist: %v", err)
+		}
+		defer srcDir.Delete()
+
+		if err := dstDir.MkdirIfNotExist(); err != nil {
+			t.Fatalf("MkdirIfNotExist: %v", err)
+		}
+		defer dstDir.Delete()
+
+		srcFile := srcDir.Join("file1.txt")
+		if err := srcFile.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+
+		if err := srcDir.Copy(dstDir); err != nil {
+			t.Fatalf("Copy: %v", err)
+		}
+
+		dstFile := dstDir.Join("file1.txt")
+		dstContent, err := dstFile.ReadFile()
+		if err != nil {
+			t.Fatalf("ReadFile: %v", err)
+		}
+		if string(dstContent) != string(testContent) {
+			t.Errorf("expected %q, got %q", testContent, dstContent)
+		}
+	})
 }
 
 func TestIsAbs(t *testing.T) {
@@ -282,4 +387,207 @@ func TestWalk(t *testing.T) {
 	}
 
 	os.RemoveAll(p.String())
+}
+
+func TestReadFile(t *testing.T) {
+	p := New("testfile.txt")
+	if err := p.WriteFile(testContent); err != nil {
+		t.Errorf("WriteFile: %v", err)
+	}
+
+	content, err := p.ReadFile()
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if string(content) != string(testContent) {
+		t.Errorf("expected %s, got %s", testContent, content)
+	}
+
+	os.Remove(p.String())
+}
+
+func TestMkdirIfNotExist(t *testing.T) {
+	p := New("testdir")
+
+	// Ensure the directory does not exist before the test
+	if p.IsExist() {
+		p.Delete()
+	}
+
+	// Test creating a new directory
+	err := p.MkdirIfNotExist()
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if !p.IsDir() {
+		t.Errorf("expected path to be a directory")
+	}
+
+	// Test calling MkdirIfNotExist on an existing directory
+	err = p.MkdirIfNotExist()
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	// Test calling MkdirIfNotExist on a path that exists but is not a directory
+	filePath := p.Join("testfile.txt")
+	err = filePath.WriteFile([]byte("test"))
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	err = filePath.MkdirIfNotExist()
+	if err == nil {
+		t.Errorf("expected error, got nil")
+	}
+
+	// Clean up
+	p.Delete()
+}
+
+func TestReadFileX(t *testing.T) {
+	p := New("testfile.txt")
+	if err := p.WriteFile(testContent); err != nil {
+		t.Errorf("WriteFile: %v", err)
+	}
+
+	content := p.ReadFileX()
+	if string(content) != string(testContent) {
+		t.Errorf("expected %s, got %s", testContent, content)
+	}
+
+	os.Remove(p.String())
+}
+
+func TestSizeX(t *testing.T) {
+	p := New("testfile.txt")
+	if err := p.WriteFile(testContent); err != nil {
+		t.Errorf("WriteFile: %v", err)
+	}
+	defer p.Delete()
+
+	expected := int64(len(testContent))
+	size := p.SizeX()
+	if size != expected {
+		t.Errorf("expected %d, got %d", expected, size)
+	}
+}
+
+func TestIsWritable(t *testing.T) {
+	t.Run("NonExistentPath", func(t *testing.T) {
+		p := New("nonexistentfile.txt")
+		if p.IsWritable() {
+			t.Errorf("expected path to be non-writable")
+		}
+	})
+
+	t.Run("WritableFile", func(t *testing.T) {
+		p := New("writablefile.txt")
+		if err := p.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		defer p.Delete()
+
+		if !p.IsWritable() {
+			t.Errorf("expected path to be writable")
+		}
+	})
+
+	t.Run("NonWritableFile", func(t *testing.T) {
+		p := New("nonwritablefile.txt")
+		if err := p.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		defer p.Delete()
+
+		if err := os.Chmod(p.String(), 0o444); err != nil {
+			t.Fatalf("Chmod: %v", err)
+		}
+
+		if p.IsWritable() {
+			t.Errorf("expected path to be non-writable")
+		}
+	})
+
+	t.Run("WritableDirectory", func(t *testing.T) {
+		p := New("writabledir")
+		if err := p.MkdirIfNotExist(); err != nil {
+			t.Fatalf("MkdirIfNotExist: %v", err)
+		}
+		defer p.Delete()
+
+		if !p.IsWritable() {
+			t.Errorf("expected path to be writable")
+		}
+	})
+
+	t.Run("NonWritableDirectory", func(t *testing.T) {
+		p := New("nonwritabledir")
+		if err := p.MkdirIfNotExist(); err != nil {
+			t.Fatalf("MkdirIfNotExist: %v", err)
+		}
+		defer p.Delete()
+
+		if err := os.Chmod(p.String(), 0o555); err != nil {
+			t.Fatalf("Chmod: %v", err)
+		}
+
+		if p.IsWritable() {
+			t.Errorf("expected path to be non-writable")
+		}
+	})
+}
+
+func TestOpenFile(t *testing.T) {
+	p := New("testfile.txt")
+	defer p.Delete()
+
+	// Test creating a new file
+	f, err := p.OpenFile(os.O_RDWR|os.O_CREATE, 0o644)
+	if err != nil {
+		t.Fatalf("OpenFile: %v", err)
+	}
+	f.Close()
+
+	if !p.IsExist() {
+		t.Errorf("expected file to be created")
+	}
+
+	// Test opening an existing file for reading and writing
+	f, err = p.OpenFile(os.O_RDWR, 0o644)
+	if err != nil {
+		t.Fatalf("OpenFile: %v", err)
+	}
+	f.Close()
+
+	// Test opening a non-existent file without create flag
+	nonExistentFile := New("nonexistentfile.txt")
+	_, err = nonExistentFile.OpenFile(os.O_RDWR, 0o644)
+	if err == nil {
+		t.Errorf("expected error, got nil")
+	}
+}
+
+func TestJoinP(t *testing.T) {
+	p := New("a", "b")
+	p1 := New("c")
+	p2 := New("d", "e")
+	result := p.JoinP(p1, p2)
+	expected := filepath.Join("a", "b", "c", "d", "e")
+	if result.String() != expected {
+		t.Errorf("expected %s, got %s", expected, result.String())
+	}
+
+	// Test with no additional paths
+	result = p.JoinP()
+	expected = filepath.Join("a", "b")
+	if result.String() != expected {
+		t.Errorf("expected %s, got %s", expected, result.String())
+	}
+
+	// Test with one additional path
+	result = p.JoinP(p1)
+	expected = filepath.Join("a", "b", "c")
+	if result.String() != expected {
+		t.Errorf("expected %s, got %s", expected, result.String())
+	}
 }

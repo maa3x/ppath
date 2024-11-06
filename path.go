@@ -19,8 +19,21 @@ func (p Path) String() string {
 	return string(p)
 }
 
+func (p Path) Str() string {
+	return string(p)
+}
+
 func (p Path) Join(v ...string) Path {
 	return Path(filepath.Join(append([]string{string(p)}, v...)...))
+}
+
+func (p Path) JoinP(v ...Path) Path {
+	s := make([]string, len(v))
+	for i := range v {
+		s[i] = string(v[i])
+	}
+
+	return p.Join(s...)
 }
 
 func (p Path) Base() Path {
@@ -62,19 +75,18 @@ func (p Path) Delete() error {
 	return os.RemoveAll(string(p))
 }
 
+func (p Path) Remove() error {
+	return p.Delete()
+}
+
 func (p Path) Rename(n string) error {
 	return os.Rename(string(p), n)
 }
 
 func (p Path) Copy(dst Path) error {
 	if p.IsDir() {
-		if dst.IsExist() && !dst.IsDir() {
-			return errors.New("destination is not a directory, cannot copy directory to file")
-		}
-		if !dst.IsExist() {
-			if err := os.MkdirAll(string(dst), 0o755); err != nil {
-				return err
-			}
+		if err := dst.MkdirIfNotExist(); err != nil {
+			return err
 		}
 		return os.CopyFS(string(dst), os.DirFS(string(p)))
 	}
@@ -86,7 +98,7 @@ func (p Path) Copy(dst Path) error {
 	defer src.Close()
 
 	if dst.IsDir() {
-		dst = dst.Join(p.Base().String())
+		dst = dst.JoinP(p.Base())
 	}
 
 	var dest io.WriteCloser
@@ -109,22 +121,41 @@ func (p Path) Open() (*os.File, error) {
 	return os.Open(string(p))
 }
 
+func (p Path) OpenFile(flag int, perm os.FileMode) (*os.File, error) {
+	return os.OpenFile(string(p), flag, perm)
+}
+
 func (p Path) Create() (*os.File, error) {
 	if p.IsExist() {
 		return nil, errors.New("already exists")
 	}
 
-	if !p.Dir().IsExist() {
-		if err := os.MkdirAll(p.Dir().String(), 0o755); err != nil {
-			return nil, fmt.Errorf("create parent directory: %w", err)
-		}
+	if err := p.Dir().MkdirIfNotExist(); err != nil {
+		return nil, fmt.Errorf("create parent directory: %w", err)
 	}
 
 	return os.Create(string(p))
 }
 
+func (p Path) MkdirIfNotExist() error {
+	if !p.IsExist() {
+		return os.MkdirAll(string(p), 0o755)
+	}
+
+	if !p.IsDir() {
+		return errors.New("already exists but not a directory")
+	}
+
+	return nil
+}
+
 func (p Path) ReadFile() ([]byte, error) {
 	return os.ReadFile(string(p))
+}
+
+func (p Path) ReadFileX() []byte {
+	v, _ := p.ReadFile()
+	return v
 }
 
 func (p Path) WriteFile(data []byte) error {
@@ -178,6 +209,34 @@ func (p Path) IsDev() bool {
 func (p Path) IsExist() bool {
 	_, err := p.Stat()
 	return err == nil
+}
+
+func (p Path) IsWritable() bool {
+	if !p.IsExist() {
+		return false
+	}
+
+	if p.IsDir() {
+		tp := p.Join(".tmp_check_write")
+		f, err := os.OpenFile(string(tp), os.O_WRONLY|os.O_CREATE, 0o600)
+		if err != nil {
+			return false
+		}
+		f.Close()
+		tp.Delete()
+		return true
+	}
+
+	if !p.IsRegular() {
+		return false
+	}
+
+	f, err := os.OpenFile(string(p), os.O_WRONLY, 0o600)
+	if err != nil {
+		return false
+	}
+	f.Close()
+	return true
 }
 
 func (p Path) Match(pattern string) bool {
