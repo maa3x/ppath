@@ -1,4 +1,4 @@
-package path
+package ppath
 
 import (
 	"errors"
@@ -34,6 +34,14 @@ func (p Path) JoinP(v ...Path) Path {
 	}
 
 	return p.Join(s...)
+}
+
+func (p Path) Append(v ...string) Path {
+	return p.Join(v...)
+}
+
+func (p Path) Appendf(format string, args ...any) Path {
+	return p.Append(fmt.Sprintf(format, args...))
 }
 
 func (p Path) Base() Path {

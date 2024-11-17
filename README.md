@@ -7,7 +7,7 @@ This Go library provides a robust and expressive suite of utilities for handling
 To install the library, use `go get`:
 
 ```sh
-go get github.com/maa3x/path
+go get github.com/maa3x/ppath
 ```
 
 ## Usage
@@ -21,7 +21,7 @@ import (
   "fmt"
   "log"
 
-  "github.com/maa3x/path"
+  "github.com/maa3x/ppath"
 )
 
 func main() {

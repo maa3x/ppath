@@ -1,3 +1,3 @@
-module github.com/maa3x/path
+module github.com/maa3x/ppath
 
 go 1.23.2

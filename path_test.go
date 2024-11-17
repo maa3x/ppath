@@ -1,4 +1,4 @@
-package path
+package ppath
 
 import (
 	"io/fs"
@@ -587,6 +587,52 @@ func TestJoinP(t *testing.T) {
 	// Test with one additional path
 	result = p.JoinP(p1)
 	expected = filepath.Join("a", "b", "c")
+	if result.String() != expected {
+		t.Errorf("expected %s, got %s", expected, result.String())
+	}
+}
+
+func TestAppend(t *testing.T) {
+	p := New("a", "b")
+	result := p.Append("c", "d")
+	expected := filepath.Join("a", "b", "c", "d")
+	if result.String() != expected {
+		t.Errorf("expected %s, got %s", expected, result.String())
+	}
+
+	// Test appending no additional strings
+	result = p.Append()
+	expected = filepath.Join("a", "b")
+	if result.String() != expected {
+		t.Errorf("expected %s, got %s", expected, result.String())
+	}
+
+	// Test appending one additional string
+	result = p.Append("c")
+	expected = filepath.Join("a", "b", "c")
+	if result.String() != expected {
+		t.Errorf("expected %s, got %s", expected, result.String())
+	}
+}
+
+func TestAppendf(t *testing.T) {
+	p := New("a", "b")
+	result := p.Appendf("c%d", 1)
+	expected := filepath.Join("a", "b", "c1")
+	if result.String() != expected {
+		t.Errorf("expected %s, got %s", expected, result.String())
+	}
+
+	// Test appending with multiple format arguments
+	result = p.Appendf("d%d_e%s", 2, "f")
+	expected = filepath.Join("a", "b", "d2_ef")
+	if result.String() != expected {
+		t.Errorf("expected %s, got %s", expected, result.String())
+	}
+
+	// Test appending with no format arguments
+	result = p.Appendf("g")
+	expected = filepath.Join("a", "b", "g")
 	if result.String() != expected {
 		t.Errorf("expected %s, got %s", expected, result.String())
 	}
