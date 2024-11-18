@@ -2,6 +2,7 @@ package ppath
 
 import (
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -635,5 +636,27 @@ func TestAppendf(t *testing.T) {
 	expected = filepath.Join("a", "b", "g")
 	if result.String() != expected {
 		t.Errorf("expected %s, got %s", expected, result.String())
+	}
+}
+
+func TestSourceFile(t *testing.T) {
+	// Test that SourceFile returns the correct path of the current file
+	expected := WD().Join("path_test.go").String()
+	log.Println(ThisFile())
+	sourceFile := ThisFile().String()
+	if sourceFile != expected {
+		t.Errorf("expected %s, got %s", expected, sourceFile)
+	}
+}
+
+func TestWD(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("os.Getwd: %v", err)
+	}
+
+	p := WD()
+	if p.String() != wd {
+		t.Errorf("expected %s, got %s", wd, p.String())
 	}
 }

@@ -7,12 +7,29 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 type Path string
 
 func New(v ...string) Path {
 	return Path(filepath.Join(v...))
+}
+
+// ThisFile retrieves the path of the source file from which it was invoked.
+func ThisFile() Path {
+	_, f, _, _ := runtime.Caller(1)
+	return New(f)
+}
+
+// WD returns the path of the application’s current working directory.
+func WD() Path {
+	v := "."
+	if wd, err := os.Getwd(); err == nil {
+		v = wd
+	}
+
+	return New(v)
 }
 
 func (p Path) String() string {
