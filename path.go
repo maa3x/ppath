@@ -142,6 +142,14 @@ func (p Path) Copy(dst Path) error {
 	return err
 }
 
+func (p Path) Move(dst Path) error {
+	if err := dst.Dir().MkdirIfNotExist(); err != nil {
+		return fmt.Errorf("make parent directory: %w", err)
+	}
+
+	return p.Rename(dst.String())
+}
+
 func (p Path) Open() (*os.File, error) {
 	return os.Open(string(p))
 }

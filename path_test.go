@@ -660,3 +660,99 @@ func TestWD(t *testing.T) {
 		t.Errorf("expected %s, got %s", wd, p.String())
 	}
 }
+
+func TestMove(t *testing.T) {
+	t.Run("MoveFile", func(t *testing.T) {
+		src := New("srcfile.txt")
+		dst := New("dstfile.txt")
+		if err := src.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		defer src.Delete()
+		defer dst.Delete()
+
+		if err := src.Move(dst); err != nil {
+			t.Fatalf("Move: %v", err)
+		}
+
+		if src.IsExist() {
+			t.Errorf("expected source file to be moved")
+		}
+		if !dst.IsExist() {
+			t.Errorf("expected destination file to exist")
+		}
+
+		dstContent, err := dst.ReadFile()
+		if err != nil {
+			t.Fatalf("ReadFile: %v", err)
+		}
+		if string(dstContent) != string(testContent) {
+			t.Errorf("expected %s, got %s", testContent, dstContent)
+		}
+	})
+
+	t.Run("MoveFileToDirectory", func(t *testing.T) {
+		src := New("srcfile.txt")
+		dstDir := New("dstdir")
+		dst := dstDir.Join("srcfile.txt")
+		if err := src.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		defer src.Delete()
+		defer dstDir.Delete()
+
+		if err := src.Move(dst); err != nil {
+			t.Fatalf("Move: %v", err)
+		}
+
+		if src.IsExist() {
+			t.Errorf("expected source file to be moved")
+		}
+		if !dst.IsExist() {
+			t.Errorf("expected destination file to exist")
+		}
+
+		dstContent, err := dst.ReadFile()
+		if err != nil {
+			t.Fatalf("ReadFile: %v", err)
+		}
+		if string(dstContent) != string(testContent) {
+			t.Errorf("expected %s, got %s", testContent, dstContent)
+		}
+	})
+
+	t.Run("MoveDirectory", func(t *testing.T) {
+		srcDir := New("srcdir")
+		dstDir := New("dstdir")
+		if err := srcDir.MkdirIfNotExist(); err != nil {
+			t.Fatalf("MkdirIfNotExist: %v", err)
+		}
+		defer srcDir.Delete()
+		defer dstDir.Delete()
+
+		srcFile := srcDir.Join("file.txt")
+		if err := srcFile.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+
+		if err := srcDir.Move(dstDir); err != nil {
+			t.Fatalf("Move: %v", err)
+		}
+
+		if srcDir.IsExist() {
+			t.Errorf("expected source directory to be moved")
+		}
+		if !dstDir.IsExist() {
+			t.Errorf("expected destination directory to exist")
+		}
+
+		dstFile := dstDir.Join("file.txt")
+		dstContent, err := dstFile.ReadFile()
+		if err != nil {
+			t.Fatalf("ReadFile: %v", err)
+		}
+		if string(dstContent) != string(testContent) {
+			t.Errorf("expected %s, got %s", testContent, dstContent)
+		}
+	})
+}
