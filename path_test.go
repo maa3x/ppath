@@ -756,3 +756,13 @@ func TestMove(t *testing.T) {
 		}
 	})
 }
+
+func TestStringP(t *testing.T) {
+	result := New("a", "b", "c").StringP()
+	if result == nil {
+		t.Errorf("expected non-nil pointer, got nil")
+	}
+	if expected := filepath.Join("a", "b", "c"); *result != expected {
+		t.Errorf("expected %s, got %s", expected, *result)
+	}
+}

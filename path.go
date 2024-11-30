@@ -36,8 +36,8 @@ func (p Path) String() string {
 	return string(p)
 }
 
-func (p Path) Str() string {
-	return string(p)
+func (p Path) StringP() *string {
+	return (*string)(&p)
 }
 
 func (p Path) Join(v ...string) Path {
