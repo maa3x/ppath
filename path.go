@@ -182,6 +182,18 @@ func (p Path) MkdirIfNotExist() error {
 	return nil
 }
 
+func (p Path) ReadDir() ([]fs.DirEntry, error) {
+	if !p.IsDir() {
+		return nil, errors.New("not a directory")
+	}
+
+	entries, err := os.ReadDir(string(p))
+	if err != nil {
+		return nil, fmt.Errorf("read directory: %w", err)
+	}
+	return entries, nil
+}
+
 func (p Path) ReadFile() ([]byte, error) {
 	return os.ReadFile(string(p))
 }

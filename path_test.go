@@ -766,3 +766,57 @@ func TestStringP(t *testing.T) {
 		t.Errorf("expected %s, got %s", expected, *result)
 	}
 }
+
+func TestReadDir(t *testing.T) {
+	// Test reading a directory with files
+	dir := New("testdir")
+	if err := dir.MkdirIfNotExist(); err != nil {
+		t.Fatalf("MkdirIfNotExist: %v", err)
+	}
+	defer dir.Delete()
+
+	file1 := dir.Join("file1.txt")
+	if err := file1.WriteFile(testContent); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	file2 := dir.Join("file2.txt")
+	if err := file2.WriteFile(testContent); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	entries, err := dir.ReadDir()
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+
+	expectedEntries := map[string]bool{
+		"file1.txt": true,
+		"file2.txt": true,
+	}
+
+	for _, entry := range entries {
+		if _, ok := expectedEntries[entry.Name()]; !ok {
+			t.Errorf("unexpected entry: %s", entry.Name())
+		}
+		delete(expectedEntries, entry.Name())
+	}
+
+	if len(expectedEntries) != 0 {
+		t.Errorf("missing entries: %v", expectedEntries)
+	}
+
+	// Test reading a non-directory path
+	file := New("testfile.txt")
+	if err := file.WriteFile(testContent); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	defer file.Delete()
+
+	_, err = file.ReadDir()
+	if err == nil {
+		t.Errorf("expected error, got nil")
+	}
+	if err.Error() != "not a directory" {
+		t.Errorf("expected 'not a directory' error, got %v", err)
+	}
+}
