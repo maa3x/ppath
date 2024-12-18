@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 type Path string
@@ -32,7 +33,21 @@ func WD() Path {
 	return New(v)
 }
 
+// ThisDir retrieves the path of the directory containing the source file from which it was invoked.
+func ThisDir() Path {
+	_, f, _, ok := runtime.Caller(1)
+	if ok {
+		return New(f).Dir()
+	}
+
+	return WD()
+}
+
 func (p Path) String() string {
+	return string(p)
+}
+
+func (p Path) S() string {
 	return string(p)
 }
 
@@ -63,6 +78,15 @@ func (p Path) Appendf(format string, args ...any) Path {
 
 func (p Path) Base() Path {
 	return Path(filepath.Base(string(p)))
+}
+
+func (p Path) BaseWithoutExt() Path {
+	base := p.Base()
+	segs := strings.Split(string(base), ".")
+	if len(segs) == 1 || (len(segs) == 2 && segs[0] == "") {
+		return base
+	}
+	return Path(strings.Join(segs[:len(segs)-1], "."))
 }
 
 func (p Path) Dir() Path {
@@ -96,6 +120,14 @@ func (p Path) Abs() (Path, error) {
 	return Path(abs), err
 }
 
+func (p Path) IsChildOf(parent Path) bool {
+	return strings.HasPrefix(string(p), string(parent))
+}
+
+func (p Path) IsParentOf(child Path) bool {
+	return child.IsChildOf(p)
+}
+
 func (p Path) Delete() error {
 	return os.RemoveAll(string(p))
 }
@@ -105,6 +137,9 @@ func (p Path) Remove() error {
 }
 
 func (p Path) Rename(n string) error {
+	if err := Path(n).Dir().MkdirIfNotExist(); err != nil {
+		return fmt.Errorf("create parent directory: %w", err)
+	}
 	return os.Rename(string(p), n)
 }
 
@@ -125,16 +160,12 @@ func (p Path) Copy(dst Path) error {
 	if dst.IsDir() {
 		dst = dst.JoinP(p.Base())
 	}
-
-	var dest io.WriteCloser
-	if dst.IsExist() {
-		if dest, err = dst.Open(); err != nil {
-			return err
-		}
-	} else {
-		if dest, err = dst.Create(); err != nil {
-			return err
-		}
+	if err := dst.Dir().MkdirIfNotExist(); err != nil {
+		return fmt.Errorf("create parent directory: %w", err)
+	}
+	dest, err := dst.OpenFile(os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
 	}
 	defer dest.Close()
 
@@ -143,6 +174,10 @@ func (p Path) Copy(dst Path) error {
 }
 
 func (p Path) Move(dst Path) error {
+	if !p.IsExist() {
+		return errors.New("source file does not exist")
+	}
+
 	if err := dst.Dir().MkdirIfNotExist(); err != nil {
 		return fmt.Errorf("make parent directory: %w", err)
 	}
@@ -150,12 +185,22 @@ func (p Path) Move(dst Path) error {
 	return p.Rename(dst.String())
 }
 
-func (p Path) Open() (*os.File, error) {
-	return os.Open(string(p))
+func (p Path) OpenFile(flag int, perm os.FileMode) (*os.File, error) {
+	if p.IsDir() {
+		return nil, errors.New("can not open a directory")
+	}
+	if err := p.Dir().MkdirIfNotExist(); err != nil {
+		return nil, fmt.Errorf("create parent directory: %w", err)
+	}
+	return os.OpenFile(string(p), flag, perm)
 }
 
-func (p Path) OpenFile(flag int, perm os.FileMode) (*os.File, error) {
-	return os.OpenFile(string(p), flag, perm)
+func (p Path) Open() (*os.File, error) {
+	return p.OpenFile(os.O_RDONLY, 0)
+}
+
+func (p Path) OpenOrCreate() (*os.File, error) {
+	return p.OpenFile(os.O_RDWR|os.O_CREATE, 0o644)
 }
 
 func (p Path) Create() (*os.File, error) {
@@ -204,6 +249,12 @@ func (p Path) ReadFileX() []byte {
 }
 
 func (p Path) WriteFile(data []byte) error {
+	if p.IsDir() {
+		return errors.New("can not write to a directory")
+	}
+	if err := p.Dir().MkdirIfNotExist(); err != nil {
+		return fmt.Errorf("create parent directory: %w", err)
+	}
 	return os.WriteFile(string(p), data, 0o644)
 }
 

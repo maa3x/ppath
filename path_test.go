@@ -109,138 +109,6 @@ func TestDelete(t *testing.T) {
 	}
 }
 
-func TestRename(t *testing.T) {
-	p := New("testfile.txt")
-	os.WriteFile(p.String(), []byte("test"), 0o644)
-	newName := "newtestfile.txt"
-	err := p.Rename(newName)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-	if !New(newName).IsExist() {
-		t.Errorf("expected file to be renamed")
-	}
-	os.Remove(newName)
-}
-
-func TestCopy(t *testing.T) {
-	t.Run("CopyFileToFile", func(t *testing.T) {
-		src := New("srcfile.txt")
-		dst := New("dstfile.txt")
-		if err := src.WriteFile(testContent); err != nil {
-			t.Fatalf("WriteFile: %v", err)
-		}
-		defer os.Remove(src.String())
-
-		if err := src.Copy(dst); err != nil {
-			t.Fatalf("Copy: %v", err)
-		}
-		defer os.Remove(dst.String())
-
-		dstContent, err := dst.ReadFile()
-		if err != nil {
-			t.Fatalf("ReadFile: %v", err)
-		}
-		if string(dstContent) != string(testContent) {
-			t.Errorf("expected %s, got %s", testContent, dstContent)
-		}
-	})
-
-	t.Run("CopyFileToDirectory", func(t *testing.T) {
-		src := New("srcfile.txt")
-		if err := src.WriteFile(testContent); err != nil {
-			t.Fatalf("WriteFile: %v", err)
-		}
-		defer src.Delete()
-
-		dst := New("dstdir", "dstfile.txt")
-		if err := src.Copy(dst); err != nil {
-			t.Fatalf("Copy: %v", err)
-		}
-		defer dst.Delete()
-
-		dstContent, err := dst.ReadFile()
-		if err != nil {
-			t.Fatalf("ReadFile: %v", err)
-		}
-		if string(dstContent) != string(testContent) {
-			t.Errorf("expected %s, got %s", testContent, dstContent)
-		}
-	})
-
-	t.Run("CopyDirectoryToDirectory", func(t *testing.T) {
-		src := New("srcdir")
-		if err := src.MkdirIfNotExist(); err != nil {
-			t.Fatalf("MkdirIfNotExist: %v", err)
-		}
-		defer src.Delete()
-
-		f1 := src.Join("file1.txt")
-		if err := f1.WriteFile(testContent); err != nil {
-			t.Fatalf("WriteFile: %v", err)
-		}
-		f2 := src.Join("file2.txt")
-		if err := f2.WriteFile(testContent); err != nil {
-			t.Fatalf("WriteFile: %v", err)
-		}
-
-		dstDir := New("dstdir")
-		defer dstDir.Delete()
-
-		if err := src.Copy(dstDir); err != nil {
-			t.Fatalf("Copy: %v", err)
-		}
-
-		dstContent1, err := dstDir.Join("file1.txt").ReadFile()
-		if err != nil {
-			t.Fatalf("ReadFile: %v", err)
-		}
-		if string(dstContent1) != string(testContent) {
-			t.Errorf("expected %s, got %s", testContent, dstContent1)
-		}
-
-		dstContent2, err := dstDir.Join("file2.txt").ReadFile()
-		if err != nil {
-			t.Fatalf("ReadFile: %v", err)
-		}
-		if string(dstContent2) != string(testContent) {
-			t.Errorf("expected %s, got %s", testContent, dstContent2)
-		}
-	})
-
-	t.Run("CopyDirectoryToExistingDirectory", func(t *testing.T) {
-		srcDir := New("srcdir")
-		dstDir := New("dstdir")
-		if err := srcDir.MkdirIfNotExist(); err != nil {
-			t.Fatalf("MkdirIfNotExist: %v", err)
-		}
-		defer srcDir.Delete()
-
-		if err := dstDir.MkdirIfNotExist(); err != nil {
-			t.Fatalf("MkdirIfNotExist: %v", err)
-		}
-		defer dstDir.Delete()
-
-		srcFile := srcDir.Join("file1.txt")
-		if err := srcFile.WriteFile(testContent); err != nil {
-			t.Fatalf("WriteFile: %v", err)
-		}
-
-		if err := srcDir.Copy(dstDir); err != nil {
-			t.Fatalf("Copy: %v", err)
-		}
-
-		dstFile := dstDir.Join("file1.txt")
-		dstContent, err := dstFile.ReadFile()
-		if err != nil {
-			t.Fatalf("ReadFile: %v", err)
-		}
-		if string(dstContent) != string(testContent) {
-			t.Errorf("expected %q, got %q", testContent, dstContent)
-		}
-	})
-}
-
 func TestIsAbs(t *testing.T) {
 	p := New("/absolute/path")
 	if !p.IsAbs() {
@@ -661,6 +529,394 @@ func TestWD(t *testing.T) {
 	}
 }
 
+func TestStringP(t *testing.T) {
+	result := New("a", "b", "c").StringP()
+	if result == nil {
+		t.Errorf("expected non-nil pointer, got nil")
+	}
+	if expected := filepath.Join("a", "b", "c"); *result != expected {
+		t.Errorf("expected %s, got %s", expected, *result)
+	}
+}
+
+func TestReadDir(t *testing.T) {
+	// Test reading a directory with files
+	dir := New("testdir")
+	if err := dir.MkdirIfNotExist(); err != nil {
+		t.Fatalf("MkdirIfNotExist: %v", err)
+	}
+	defer dir.Delete()
+
+	file1 := dir.Join("file1.txt")
+	if err := file1.WriteFile(testContent); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	file2 := dir.Join("file2.txt")
+	if err := file2.WriteFile(testContent); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	entries, err := dir.ReadDir()
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+
+	expectedEntries := map[string]bool{
+		"file1.txt": true,
+		"file2.txt": true,
+	}
+
+	for _, entry := range entries {
+		if _, ok := expectedEntries[entry.Name()]; !ok {
+			t.Errorf("unexpected entry: %s", entry.Name())
+		}
+		delete(expectedEntries, entry.Name())
+	}
+
+	if len(expectedEntries) != 0 {
+		t.Errorf("missing entries: %v", expectedEntries)
+	}
+
+	// Test reading a non-directory path
+	file := New("testfile.txt")
+	if err := file.WriteFile(testContent); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	defer file.Delete()
+
+	_, err = file.ReadDir()
+	if err == nil {
+		t.Errorf("expected error, got nil")
+	}
+	if err.Error() != "not a directory" {
+		t.Errorf("expected 'not a directory' error, got %v", err)
+	}
+}
+
+func TestBaseWithoutExt(t *testing.T) {
+	tests := []struct {
+		input    Path
+		expected string
+	}{
+		{New("."), "."},
+		{New("a", "b", "c.txt"), "c"},
+		{New("a", "b", "c.tar.gz"), "c.tar"},
+		{New("a", "b", "c"), "c"},
+		{New("a", "b", ".hiddenfile"), ".hiddenfile"},
+		{New("a", "b", "c.d.e.f"), "c.d.e"},
+	}
+
+	for _, test := range tests {
+		result := test.input.BaseWithoutExt()
+		if result.String() != test.expected {
+			t.Errorf("expected %s, got %s", test.expected, result.String())
+		}
+	}
+}
+
+func TestIsChildOf(t *testing.T) {
+	tests := []struct {
+		child    Path
+		parent   Path
+		expected bool
+	}{
+		{New("a/b/c"), New("a/b"), true},
+		{New("a/b/c"), New("a/b/c"), true},
+		{New("a/b/c"), New("a/b/c/d"), false},
+		{New("a/b/c"), New("a/b/x"), false},
+		{New("/a/b/c"), New("/a/b"), true},
+		{New("/a/b/c"), New("/a/b/c"), true},
+		{New("/a/b/c"), New("/a/b/c/d"), false},
+		{New("/a/b/c"), New("/a/b/x"), false},
+	}
+
+	for _, test := range tests {
+		result := test.child.IsChildOf(test.parent)
+		if result != test.expected {
+			t.Errorf("expected %v, got %v for child %s and parent %s", test.expected, result, test.child, test.parent)
+		}
+	}
+}
+
+func TestIsParentOf(t *testing.T) {
+	tests := []struct {
+		parent   Path
+		child    Path
+		expected bool
+	}{
+		{New("a/b"), New("a/b/c"), true},
+		{New("a/b/c"), New("a/b/c"), true},
+		{New("a/b/c/d"), New("a/b/c"), false},
+		{New("a/b/x"), New("a/b/c"), false},
+		{New("/a/b"), New("/a/b/c"), true},
+		{New("/a/b/c"), New("/a/b/c"), true},
+		{New("/a/b/c/d"), New("/a/b/c"), false},
+		{New("/a/b/x"), New("/a/b/c"), false},
+	}
+
+	for _, test := range tests {
+		result := test.parent.IsParentOf(test.child)
+		if result != test.expected {
+			t.Errorf("expected %v, got %v for parent %s and child %s", test.expected, result, test.parent, test.child)
+		}
+	}
+}
+
+func TestThisDir(t *testing.T) {
+	// Test that ThisDir returns the directory of the current file
+	expected := WD().String()
+	thisDir := ThisDir().String()
+	if thisDir != expected {
+		t.Errorf("expected %s, got %s", expected, thisDir)
+	}
+
+	// Test that ThisDir returns the correct directory when called from another function
+	func() {
+		expected := WD().String()
+		thisDir := ThisDir().String()
+		if thisDir != expected {
+			t.Errorf("expected %s, got %s", expected, thisDir)
+		}
+	}()
+}
+
+func TestS(t *testing.T) {
+	tests := []struct {
+		input    Path
+		expected string
+	}{
+		{New("a", "b", "c"), filepath.Join("a", "b", "c")},
+		{New(""), ""},
+		{New("a"), "a"},
+	}
+
+	for _, test := range tests {
+		result := test.input.S()
+		if result != test.expected {
+			t.Errorf("expected %s, got %s", test.expected, result)
+		}
+	}
+}
+
+func TestRemove(t *testing.T) {
+	// Test removing a file
+	t.Run("RemoveFile", func(t *testing.T) {
+		p := New("testfile.txt")
+		if err := p.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		defer p.Delete()
+
+		if err := p.Remove(); err != nil {
+			t.Errorf("Remove: %v", err)
+		}
+
+		if p.IsExist() {
+			t.Errorf("expected file to be removed")
+		}
+	})
+
+	// Test removing a directory
+	t.Run("RemoveDirectory", func(t *testing.T) {
+		p := New("testdir")
+		if err := p.MkdirIfNotExist(); err != nil {
+			t.Fatalf("MkdirIfNotExist: %v", err)
+		}
+		defer p.Delete()
+
+		if err := p.Remove(); err != nil {
+			t.Errorf("Remove: %v", err)
+		}
+
+		if p.IsExist() {
+			t.Errorf("expected directory to be removed")
+		}
+	})
+}
+
+func TestRename(t *testing.T) {
+	t.Run("RenameFile", func(t *testing.T) {
+		src := New("srcfile.txt")
+		dst := New("dstfile.txt")
+		if err := src.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		defer src.Delete()
+		defer dst.Delete()
+
+		if err := src.Rename(dst.String()); err != nil {
+			t.Fatalf("Rename: %v", err)
+		}
+
+		if src.IsExist() {
+			t.Errorf("expected source file to be renamed")
+		}
+		if !dst.IsExist() {
+			t.Errorf("expected destination file to exist")
+		}
+
+		dstContent, err := dst.ReadFile()
+		if err != nil {
+			t.Fatalf("ReadFile: %v", err)
+		}
+		if string(dstContent) != string(testContent) {
+			t.Errorf("expected %s, got %s", testContent, dstContent)
+		}
+	})
+
+	t.Run("RenameFileToDirectory", func(t *testing.T) {
+		src := New("srcfile.txt")
+		dstDir := New("dstdir")
+		dst := dstDir.Join("srcfile.txt")
+		if err := src.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		defer src.Delete()
+		defer dstDir.Delete()
+
+		if err := src.Rename(dst.String()); err != nil {
+			t.Fatalf("Rename: %v", err)
+		}
+
+		if src.IsExist() {
+			t.Errorf("expected source file to be renamed")
+		}
+		if !dst.IsExist() {
+			t.Errorf("expected destination file to exist")
+		}
+
+		dstContent, err := dst.ReadFile()
+		if err != nil {
+			t.Fatalf("ReadFile: %v", err)
+		}
+		if string(dstContent) != string(testContent) {
+			t.Errorf("expected %s, got %s", testContent, dstContent)
+		}
+	})
+
+	t.Run("RenameDirectory", func(t *testing.T) {
+		srcDir := New("srcdir")
+		dstDir := New("dstdir")
+		if err := srcDir.MkdirIfNotExist(); err != nil {
+			t.Fatalf("MkdirIfNotExist: %v", err)
+		}
+		defer srcDir.Delete()
+		defer dstDir.Delete()
+
+		srcFile := srcDir.Join("file.txt")
+		if err := srcFile.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+
+		if err := srcDir.Rename(dstDir.String()); err != nil {
+			t.Fatalf("Rename: %v", err)
+		}
+
+		if srcDir.IsExist() {
+			t.Errorf("expected source directory to be renamed")
+		}
+		if !dstDir.IsExist() {
+			t.Errorf("expected destination directory to exist")
+		}
+
+		dstFile := dstDir.Join("file.txt")
+		dstContent, err := dstFile.ReadFile()
+		if err != nil {
+			t.Fatalf("ReadFile: %v", err)
+		}
+		if string(dstContent) != string(testContent) {
+			t.Errorf("expected %s, got %s", testContent, dstContent)
+		}
+	})
+}
+
+func TestCopy(t *testing.T) {
+	t.Run("CopyFile", func(t *testing.T) {
+		src := New("srcfile.txt")
+		dst := New("dstfile.txt")
+		if err := src.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		defer src.Delete()
+		defer dst.Delete()
+
+		if err := src.Copy(dst); err != nil {
+			t.Fatalf("Copy: %v", err)
+		}
+
+		if !dst.IsExist() {
+			t.Errorf("expected destination file to exist")
+		}
+
+		dstContent, err := dst.ReadFile()
+		if err != nil {
+			t.Fatalf("ReadFile: %v", err)
+		}
+		if string(dstContent) != string(testContent) {
+			t.Errorf("expected %s, got %s", testContent, dstContent)
+		}
+	})
+
+	t.Run("CopyFileToDirectory", func(t *testing.T) {
+		src := New("srcfile.txt")
+		if err := src.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		defer src.Delete()
+
+		dstDir := New("dstdir")
+		defer dstDir.Delete()
+		dst := dstDir.Join("srcfile.txt")
+		if err := src.Copy(dst); err != nil {
+			t.Fatalf("Copy: %v", err)
+		}
+
+		if !dst.IsExist() {
+			t.Errorf("expected destination file to exist")
+		}
+
+		dstContent, err := dst.ReadFile()
+		if err != nil {
+			t.Fatalf("ReadFile: %v", err)
+		}
+		if string(dstContent) != string(testContent) {
+			t.Errorf("expected %s, got %s", testContent, dstContent)
+		}
+	})
+
+	t.Run("CopyDirectory", func(t *testing.T) {
+		srcDir := New("srcdir")
+		dstDir := New("dstdir")
+		if err := srcDir.MkdirIfNotExist(); err != nil {
+			t.Fatalf("MkdirIfNotExist: %v", err)
+		}
+		defer srcDir.Delete()
+		defer dstDir.Delete()
+
+		srcFile := srcDir.Join("file.txt")
+		if err := srcFile.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+
+		if err := srcDir.Copy(dstDir); err != nil {
+			t.Fatalf("Copy: %v", err)
+		}
+
+		if !dstDir.IsExist() {
+			t.Errorf("expected destination directory to exist")
+		}
+
+		dstFile := dstDir.Join("file.txt")
+		dstContent, err := dstFile.ReadFile()
+		if err != nil {
+			t.Fatalf("ReadFile: %v", err)
+		}
+		if string(dstContent) != string(testContent) {
+			t.Errorf("expected %s, got %s", testContent, dstContent)
+		}
+	})
+}
+
 func TestMove(t *testing.T) {
 	t.Run("MoveFile", func(t *testing.T) {
 		src := New("srcfile.txt")
@@ -755,68 +1011,111 @@ func TestMove(t *testing.T) {
 			t.Errorf("expected %s, got %s", testContent, dstContent)
 		}
 	})
-}
 
-func TestStringP(t *testing.T) {
-	result := New("a", "b", "c").StringP()
-	if result == nil {
-		t.Errorf("expected non-nil pointer, got nil")
-	}
-	if expected := filepath.Join("a", "b", "c"); *result != expected {
-		t.Errorf("expected %s, got %s", expected, *result)
-	}
-}
+	t.Run("MoveNonExistentFile", func(t *testing.T) {
+		src := New("nonexistentfile.txt")
+		dst := New("dstfile.txt")
 
-func TestReadDir(t *testing.T) {
-	// Test reading a directory with files
-	dir := New("testdir")
-	if err := dir.MkdirIfNotExist(); err != nil {
-		t.Fatalf("MkdirIfNotExist: %v", err)
-	}
-	defer dir.Delete()
-
-	file1 := dir.Join("file1.txt")
-	if err := file1.WriteFile(testContent); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-	file2 := dir.Join("file2.txt")
-	if err := file2.WriteFile(testContent); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	entries, err := dir.ReadDir()
-	if err != nil {
-		t.Fatalf("ReadDir: %v", err)
-	}
-
-	expectedEntries := map[string]bool{
-		"file1.txt": true,
-		"file2.txt": true,
-	}
-
-	for _, entry := range entries {
-		if _, ok := expectedEntries[entry.Name()]; !ok {
-			t.Errorf("unexpected entry: %s", entry.Name())
+		err := src.Move(dst)
+		if err == nil {
+			t.Errorf("expected error, got nil")
 		}
-		delete(expectedEntries, entry.Name())
+		if err.Error() != "source file does not exist" {
+			t.Errorf("expected 'source file does not exist' error, got %v", err)
+		}
+	})
+}
+
+func TestOpenOrCreate(t *testing.T) {
+	p := New("testfile.txt")
+	defer p.Delete()
+
+	// Test creating a new file
+	f, err := p.OpenOrCreate()
+	if err != nil {
+		t.Fatalf("OpenOrCreate: %v", err)
+	}
+	f.Close()
+
+	if !p.IsExist() {
+		t.Errorf("expected file to be created")
 	}
 
-	if len(expectedEntries) != 0 {
-		t.Errorf("missing entries: %v", expectedEntries)
+	// Test opening an existing file for reading and writing
+	f, err = p.OpenOrCreate()
+	if err != nil {
+		t.Fatalf("OpenOrCreate: %v", err)
 	}
+	f.Close()
 
-	// Test reading a non-directory path
-	file := New("testfile.txt")
-	if err := file.WriteFile(testContent); err != nil {
+	// Test writing to the file
+	content := []byte("test content")
+	if err := p.WriteFile(content); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	defer file.Delete()
 
-	_, err = file.ReadDir()
-	if err == nil {
-		t.Errorf("expected error, got nil")
+	// Test reading from the file
+	readContent, err := p.ReadFile()
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
 	}
-	if err.Error() != "not a directory" {
-		t.Errorf("expected 'not a directory' error, got %v", err)
+	if string(readContent) != string(content) {
+		t.Errorf("expected %s, got %s", content, readContent)
 	}
+}
+
+func TestCreate(t *testing.T) {
+	t.Run("CreateNewFile", func(t *testing.T) {
+		p := New("testfile.txt")
+		defer p.Delete()
+
+		f, err := p.Create()
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		f.Close()
+
+		if !p.IsExist() {
+			t.Errorf("expected file to be created")
+		}
+	})
+
+	t.Run("CreateExistingFile", func(t *testing.T) {
+		p := New("testfile.txt")
+		defer p.Delete()
+
+		// Create the file first
+		f, err := p.Create()
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		f.Close()
+
+		// Try to create the file again
+		_, err = p.Create()
+		if err == nil {
+			t.Errorf("expected error, got nil")
+		}
+		if err.Error() != "already exists" {
+			t.Errorf("expected 'already exists' error, got %v", err)
+		}
+	})
+
+	t.Run("CreateInNonExistentDirectory", func(t *testing.T) {
+		p := New("nonexistentdir", "testfile.txt")
+		defer p.Dir().Delete()
+
+		f, err := p.Create()
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		f.Close()
+
+		if !p.IsExist() {
+			t.Errorf("expected file to be created")
+		}
+		if !p.Dir().IsExist() {
+			t.Errorf("expected parent directory to be created")
+		}
+	})
 }
