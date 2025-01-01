@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -47,7 +48,7 @@ func (p Path) String() string {
 	return string(p)
 }
 
-func (p Path) S() string {
+func (p Path) Str() string {
 	return string(p)
 }
 
@@ -59,21 +60,13 @@ func (p Path) Join(v ...string) Path {
 	return Path(filepath.Join(append([]string{string(p)}, v...)...))
 }
 
-func (p Path) JoinP(v ...Path) Path {
+func (p Path) JoinPath(v ...Path) Path {
 	s := make([]string, len(v))
 	for i := range v {
 		s[i] = string(v[i])
 	}
 
 	return p.Join(s...)
-}
-
-func (p Path) Append(v ...string) Path {
-	return p.Join(v...)
-}
-
-func (p Path) Appendf(format string, args ...any) Path {
-	return p.Append(fmt.Sprintf(format, args...))
 }
 
 func (p Path) Base() Path {
@@ -110,12 +103,20 @@ func (p Path) Split() (dir, file Path) {
 	return Path(p1), Path(p2)
 }
 
+func (p Path) Segments() []string {
+	return filepath.SplitList(string(p))
+}
+
 func (p Path) Rel(r Path) (Path, error) {
 	rel, err := filepath.Rel(string(r), string(p))
 	return Path(rel), err
 }
 
 func (p Path) Abs() (Path, error) {
+	if p.IsAbs() {
+		return p, nil
+	}
+
 	abs, err := filepath.Abs(string(p))
 	return Path(abs), err
 }
@@ -158,7 +159,7 @@ func (p Path) Copy(dst Path) error {
 	defer src.Close()
 
 	if dst.IsDir() {
-		dst = dst.JoinP(p.Base())
+		dst = dst.JoinPath(p.Base())
 	}
 	if err := dst.Dir().MkdirIfNotExist(); err != nil {
 		return fmt.Errorf("create parent directory: %w", err)
@@ -243,11 +244,6 @@ func (p Path) ReadFile() ([]byte, error) {
 	return os.ReadFile(string(p))
 }
 
-func (p Path) ReadFileX() []byte {
-	v, _ := p.ReadFile()
-	return v
-}
-
 func (p Path) WriteFile(data []byte) error {
 	if p.IsDir() {
 		return errors.New("can not write to a directory")
@@ -307,6 +303,31 @@ func (p Path) IsExist() bool {
 	return err == nil
 }
 
+func (p Path) Exists() bool {
+	return p.IsExist()
+}
+
+func (p Path) DoesNotExist() bool {
+	return !p.IsExist()
+}
+
+func (p Path) IsEqual(p2 Path) bool {
+	if p == p2 {
+		return true
+	}
+
+	abs1, err := p.Abs()
+	if err != nil {
+		return false
+	}
+	ab2, err := p2.Abs()
+	if err != nil {
+		return false
+	}
+
+	return abs1 == ab2
+}
+
 func (p Path) IsWritable() bool {
 	if !p.IsExist() {
 		return false
@@ -335,6 +356,48 @@ func (p Path) IsWritable() bool {
 	return true
 }
 
+func (p Path) IsEmpty() bool {
+	if p.DoesNotExist() {
+		return true
+	}
+
+	if p.IsDir() {
+		entries, err := p.ReadDir()
+		if err != nil {
+			return false
+		}
+		return len(entries) == 0
+	}
+
+	size, err := p.Size()
+	if err != nil {
+		return false
+	}
+	return size == 0
+}
+
+func (p Path) HasPrefix(prefix string) bool {
+	return strings.HasPrefix(string(p), prefix)
+}
+
+func (p Path) HasSuffix(suffix string) bool {
+	return strings.HasSuffix(string(p), suffix)
+}
+
+func (p Path) HasExt(ext string) bool {
+	if ext == "" {
+		return true
+	}
+	if ext[0] != '.' {
+		ext = "." + ext
+	}
+	return strings.HasSuffix(string(p), ext)
+}
+
+func (p Path) Contains(sub string) bool {
+	return strings.Contains(string(p), sub)
+}
+
 func (p Path) Match(pattern string) bool {
 	v, err := filepath.Match(pattern, string(p))
 	return err == nil && v
@@ -342,6 +405,14 @@ func (p Path) Match(pattern string) bool {
 
 func (p Path) VolumeName() string {
 	return filepath.VolumeName(string(p))
+}
+
+func (p Path) Clean() Path {
+	return Path(filepath.Clean(string(p)))
+}
+
+func (p Path) Normalize() Path {
+	return p.Clean()
 }
 
 func (p Path) Stat() (fs.FileInfo, error) {
@@ -363,4 +434,67 @@ func (p Path) SizeX() int64 {
 
 func (p Path) Walk(fn fs.WalkDirFunc) error {
 	return filepath.WalkDir(string(p), fn)
+}
+
+func (p Path) HasQuery() bool {
+	return strings.Contains(string(p), "?")
+}
+
+func (p Path) TrimQuery() Path {
+	if !p.HasQuery() {
+		return p
+	}
+	return Path(strings.Split(string(p), "?")[0])
+}
+
+func (p Path) WithQuery(q string) Path {
+	if q == "" {
+		return p.TrimQuery()
+	}
+	return Path(string(p.TrimQuery()) + "?" + q)
+}
+
+func (p Path) Query() string {
+	if !p.HasQuery() {
+		return ""
+	}
+	return strings.Split(string(p), "?")[1]
+}
+
+func (p Path) QuerySet(k string, v any) Path {
+	if q, err := url.ParseQuery(p.Query()); err == nil {
+		q.Set(k, qval(v))
+		return p.WithQuery(q.Encode())
+	}
+	return p
+}
+
+func (p Path) QueryAdd(k string, v any) Path {
+	if q, err := url.ParseQuery(p.Query()); err == nil {
+		q.Add(k, qval(v))
+		return p.WithQuery(q.Encode())
+	}
+	return p
+}
+
+func (p Path) QueryDel(k string) Path {
+	if q, err := url.ParseQuery(p.Query()); err == nil {
+		q.Del(k)
+		return p.WithQuery(q.Encode())
+	}
+	return p
+}
+
+func (p Path) QueryHas(k string) bool {
+	if q, err := url.ParseQuery(p.Query()); err == nil {
+		return q.Has(k)
+	}
+	return false
+}
+
+func qval(v any) string {
+	if v == nil {
+		return ""
+	}
+	return fmt.Sprint(v)
 }

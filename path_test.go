@@ -313,20 +313,6 @@ func TestMkdirIfNotExist(t *testing.T) {
 	p.Delete()
 }
 
-func TestReadFileX(t *testing.T) {
-	p := New("testfile.txt")
-	if err := p.WriteFile(testContent); err != nil {
-		t.Errorf("WriteFile: %v", err)
-	}
-
-	content := p.ReadFileX()
-	if string(content) != string(testContent) {
-		t.Errorf("expected %s, got %s", testContent, content)
-	}
-
-	os.Remove(p.String())
-}
-
 func TestSizeX(t *testing.T) {
 	p := New("testfile.txt")
 	if err := p.WriteFile(testContent); err != nil {
@@ -440,68 +426,22 @@ func TestJoinP(t *testing.T) {
 	p := New("a", "b")
 	p1 := New("c")
 	p2 := New("d", "e")
-	result := p.JoinP(p1, p2)
+	result := p.JoinPath(p1, p2)
 	expected := filepath.Join("a", "b", "c", "d", "e")
 	if result.String() != expected {
 		t.Errorf("expected %s, got %s", expected, result.String())
 	}
 
 	// Test with no additional paths
-	result = p.JoinP()
+	result = p.JoinPath()
 	expected = filepath.Join("a", "b")
 	if result.String() != expected {
 		t.Errorf("expected %s, got %s", expected, result.String())
 	}
 
 	// Test with one additional path
-	result = p.JoinP(p1)
+	result = p.JoinPath(p1)
 	expected = filepath.Join("a", "b", "c")
-	if result.String() != expected {
-		t.Errorf("expected %s, got %s", expected, result.String())
-	}
-}
-
-func TestAppend(t *testing.T) {
-	p := New("a", "b")
-	result := p.Append("c", "d")
-	expected := filepath.Join("a", "b", "c", "d")
-	if result.String() != expected {
-		t.Errorf("expected %s, got %s", expected, result.String())
-	}
-
-	// Test appending no additional strings
-	result = p.Append()
-	expected = filepath.Join("a", "b")
-	if result.String() != expected {
-		t.Errorf("expected %s, got %s", expected, result.String())
-	}
-
-	// Test appending one additional string
-	result = p.Append("c")
-	expected = filepath.Join("a", "b", "c")
-	if result.String() != expected {
-		t.Errorf("expected %s, got %s", expected, result.String())
-	}
-}
-
-func TestAppendf(t *testing.T) {
-	p := New("a", "b")
-	result := p.Appendf("c%d", 1)
-	expected := filepath.Join("a", "b", "c1")
-	if result.String() != expected {
-		t.Errorf("expected %s, got %s", expected, result.String())
-	}
-
-	// Test appending with multiple format arguments
-	result = p.Appendf("d%d_e%s", 2, "f")
-	expected = filepath.Join("a", "b", "d2_ef")
-	if result.String() != expected {
-		t.Errorf("expected %s, got %s", expected, result.String())
-	}
-
-	// Test appending with no format arguments
-	result = p.Appendf("g")
-	expected = filepath.Join("a", "b", "g")
 	if result.String() != expected {
 		t.Errorf("expected %s, got %s", expected, result.String())
 	}
@@ -691,7 +631,7 @@ func TestS(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		result := test.input.S()
+		result := test.input.Str()
 		if result != test.expected {
 			t.Errorf("expected %s, got %s", test.expected, result)
 		}
