@@ -1,0 +1,238 @@
+---
+issues:
+  exclude-rules:
+  - linters: [dupl, lll mnd]
+    path: (.+)_test\.go
+  exclude-use-default: true
+linters:
+  disable-all: true
+  enable:
+  - asasalint
+  - asciicheck
+  - bidichk
+  - bodyclose
+  - contextcheck
+  - decorder
+  - depguard
+  - dogsled
+  - dupl
+  - dupword
+  - durationcheck
+  - errcheck
+  - errchkjson
+  - errname
+  - errorlint
+  - exhaustive
+  - fatcontext
+  - forcetypeassert
+  - funlen
+  - gocheckcompilerdirectives
+  - gochecknoinits
+  - gocognit
+  - goconst
+  - gocritic
+  - gocyclo
+  - godot
+  - godox
+  - gofumpt
+  - gomoddirectives
+  - goprintffuncname
+  - gosec
+  - gosimple
+  - govet
+  - iface
+  - importas
+  - ineffassign
+  - interfacebloat
+  - intrange
+  - ireturn
+  - lll
+  - loggercheck
+  - makezero
+  - mirror
+  - misspell
+  - mnd
+  - musttag
+  - nakedret
+  - nestif
+  - nilerr
+  - nilnil
+  - noctx
+  - nolintlint
+  - perfsprint
+  - prealloc
+  - predeclared
+  - protogetter
+  - recvcheck
+  - revive
+  - rowserrcheck
+  - sloglint
+  - spancheck
+  - sqlclosecheck
+  - staticcheck
+  - stylecheck
+  - tagliatelle
+  - testifylint
+  - typecheck
+  - unconvert
+  - unparam
+  - unused
+  - usestdlibvars
+  - wastedassign
+  - whitespace
+linters-settings:
+  decorder:
+    dec-order: [const, var, type, func]
+  depguard:
+    rules:
+      logger:
+        deny:
+        - desc: logging is allowed only by logutils.Log.
+          pkg: github.com/sirupsen/logrus
+        - desc: Should be replaced by standard lib errors package.
+          pkg: github.com/pkg/errors
+  dupl:
+    threshold: 100
+  errorlint:
+    asserts: false
+  funlen:
+    lines: 250
+    statements: 60
+  goconst:
+    min-len: 2
+    min-occurrences: 4
+  gocritic:
+    disabled-checks:
+    - dupImport
+    enabled-tags:
+    - diagnostic
+    - experimental
+    - opinionated
+    - performance
+    - style
+  gocyclo:
+    min-complexity: 20
+  godox:
+    keywords:
+    - FIXME
+    - TODO
+  gofumpt:
+    extra-rules: true
+    module-path: ablibrary.net
+  gosec:
+    excludes:
+    - G306
+    - G307
+  govet:
+    disable:
+    - fieldalignment
+    - loopclosure
+    - shadow
+    enable-all: true
+  importas:
+    alias:
+    - alias: pter
+      pkg: ablibrary.net/internal/grpc/adapters
+    - alias: eter
+      pkg: ablibrary.net/internal/ent/adapters
+  lll:
+    line-length: 200
+  misspell:
+    locale: US
+  mnd:
+    checks: [argument, case, condition, return]
+    ignored-functions:
+    - (.*).IntRange
+    - helpers.Chance
+    - int
+    - int16
+    - int32
+    - int64
+    - int8
+    - make
+    - rune
+    - strings.SplitN
+    - uint
+    - uint16
+    - uint32
+    - uint64
+    - uint8
+    ignored-numbers:
+    - '0'
+    - '0o400'
+    - '0o600'
+    - '0o644'
+    - '0o755'
+    - '1'
+    - '1e3'
+    - '1e6'
+    - '1e9'
+    - '2'
+    - '3'
+    - '4'
+    - '5'
+  nolintlint:
+    allow-unused: false
+    require-explanation: true
+    require-specific: true
+  revive:
+    rules:
+    - arguments:
+      - 4
+      name: argument-limit
+    - name: atomic
+    - name: confusing-naming
+    - name: confusing-results
+    - name: constant-logical-expr
+    - name: context-as-argument
+    - name: context-keys-type
+    - name: datarace
+    - name: deep-exit
+    - name: defer
+    - name: duplicated-imports
+    - name: early-return
+    - disabled: true
+      name: enforce-repeated-arg-type-style
+    - arguments:
+      - make
+      name: enforce-map-style
+    - name: error-return
+    - name: error-naming
+    - name: error-strings
+    - name: errorf
+    - arguments:
+      - 3
+      name: function-result-limit
+    - name: get-return
+    - name: identical-branches
+    - name: if-return
+    - name: import-shadowing
+    - name: increment-decrement
+    - name: indent-error-flow
+    - arguments:
+      - 4
+      name: max-control-nesting
+    - name: modifies-value-receiver
+    - name: optimize-operands-order
+    - name: range-val-address
+    - name: receiver-naming
+    - name: redundant-import-alias
+    - name: string-of-int
+    - name: superfluous-else
+    - name: time-equal
+    - name: time-naming
+    - name: unchecked-type-assertion
+    - name: unconditional-recursion
+    - disabled: true
+      name: unexported-return
+    - name: unnecessary-stmt
+    - name: unreachable-code
+    - name: unused-parameter
+    - disabled: true
+      name: unused-receiver
+    - name: use-any
+    - name: waitgroup-by-value
+  tagliatelle:
+    case:
+      rules:
+        json: snake
