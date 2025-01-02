@@ -1,8 +1,13 @@
 package ppath
 
 import (
+	"crypto/md5"
+	"crypto/sha1"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"io/fs"
 	"net/url"
@@ -467,7 +472,7 @@ func (p Path) Query() string {
 
 func (p Path) QuerySet(k string, v any) Path {
 	if q, err := url.ParseQuery(p.Query()); err == nil {
-		q.Set(k, qval(v))
+		q.Set(k, toString(v))
 		return p.WithQuery(q.Encode())
 	}
 	return p
@@ -475,7 +480,7 @@ func (p Path) QuerySet(k string, v any) Path {
 
 func (p Path) QueryAdd(k string, v any) Path {
 	if q, err := url.ParseQuery(p.Query()); err == nil {
-		q.Add(k, qval(v))
+		q.Add(k, toString(v))
 		return p.WithQuery(q.Encode())
 	}
 	return p
@@ -496,7 +501,29 @@ func (p Path) QueryHas(k string) bool {
 	return false
 }
 
-func qval(v any) string {
+func (p Path) hashFile(h hash.Hash) string {
+	f, err := p.Open()
+	if err != nil {
+		return ""
+	}
+	f.WriteTo(h)
+	f.Close()
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func (p Path) MD5() string {
+	return p.hashFile(md5.New())
+}
+
+func (p Path) SHA1() string {
+	return p.hashFile(sha1.New())
+}
+
+func (p Path) SHA256() string {
+	return p.hashFile(sha256.New())
+}
+
+func toString(v any) string {
 	if v == nil {
 		return ""
 	}
