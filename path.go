@@ -398,6 +398,10 @@ func (p Path) Contains(sub string) bool {
 	return strings.Contains(string(p), sub)
 }
 
+func (p Path) Trim() Path {
+	return Path(strings.TrimSpace(string(p)))
+}
+
 func (p Path) Match(pattern string) bool {
 	v, err := filepath.Match(pattern, string(p))
 	return err == nil && v
@@ -440,7 +444,7 @@ func (p Path) HasQuery() bool {
 	return strings.Contains(string(p), "?")
 }
 
-func (p Path) TrimQuery() Path {
+func (p Path) WithoutQuery() Path {
 	if !p.HasQuery() {
 		return p
 	}
@@ -449,9 +453,9 @@ func (p Path) TrimQuery() Path {
 
 func (p Path) WithQuery(q string) Path {
 	if q == "" {
-		return p.TrimQuery()
+		return p.WithoutQuery()
 	}
-	return Path(string(p.TrimQuery()) + "?" + q)
+	return Path(string(p.WithoutQuery()) + "?" + q)
 }
 
 func (p Path) Query() string {
