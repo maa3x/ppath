@@ -249,6 +249,27 @@ func (p Path) ReadFile() ([]byte, error) {
 	return os.ReadFile(string(p))
 }
 
+func (p Path) ReadFrom(r io.Reader) error {
+	dest, err := p.Create()
+	if err != nil {
+		return err
+	}
+	defer dest.Close()
+
+	_, err = dest.ReadFrom(r)
+	return err
+}
+
+func (p Path) ReadFromPath(p2 Path) error {
+	src, err := p2.Open()
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	return p.ReadFrom(src)
+}
+
 func (p Path) WriteFile(data []byte) error {
 	if p.IsDir() {
 		return errors.New("can not write to a directory")
@@ -257,6 +278,27 @@ func (p Path) WriteFile(data []byte) error {
 		return fmt.Errorf("create parent directory: %w", err)
 	}
 	return os.WriteFile(string(p), data, 0o644)
+}
+
+func (p Path) WriteTo(w io.Writer) error {
+	src, err := p.Open()
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	_, err = src.WriteTo(w)
+	return err
+}
+
+func (p Path) WriteToPath(p2 Path) error {
+	dest, err := p2.Create()
+	if err != nil {
+		return err
+	}
+	defer dest.Close()
+
+	return p.WriteTo(dest)
 }
 
 func (p Path) IsAbs() bool {
