@@ -1,6 +1,10 @@
 package ppath
 
 import (
+	"crypto/md5"
+	"crypto/sha1"
+	"crypto/sha256"
+	"encoding/hex"
 	"io/fs"
 	"log"
 	"os"
@@ -1058,4 +1062,267 @@ func TestCreate(t *testing.T) {
 			t.Errorf("expected parent directory to be created")
 		}
 	})
+}
+
+func TestUsage(t *testing.T) {
+	// Test Usage on an existing directory
+	t.Run("ExistingDirectory", func(t *testing.T) {
+		p := New(".")
+		usage, err := p.Usage()
+		if err != nil {
+			t.Fatalf("Usage: %v", err)
+		}
+		if usage.Total == 0 {
+			t.Errorf("expected non-zero total usage")
+		}
+		if usage.Free == 0 {
+			t.Errorf("expected non-zero free usage")
+		}
+		if usage.Used == 0 {
+			t.Errorf("expected non-zero used usage")
+		}
+		if usage.UsedPercent == 0 {
+			t.Errorf("expected non-zero used percent")
+		}
+	})
+
+	// Test Usage on a non-existent path
+	t.Run("NonExistentPath", func(t *testing.T) {
+		p := New("nonexistentpath")
+		_, err := p.Usage()
+		if err == nil {
+			t.Errorf("expected error, got nil")
+		}
+	})
+}
+
+func TestSHA256(t *testing.T) {
+	p := New("testfile.txt")
+	defer p.Delete()
+
+	// Write test content to the file
+	if err := p.WriteFile(testContent); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Calculate the expected SHA256 hash
+	expectedHash := sha256.Sum256(testContent)
+	expectedHashStr := hex.EncodeToString(expectedHash[:])
+
+	// Get the SHA256 hash from the method
+	hashStr := p.SHA256()
+
+	if hashStr != expectedHashStr {
+		t.Errorf("expected %s, got %s", expectedHashStr, hashStr)
+	}
+}
+
+func TestSHA1(t *testing.T) {
+	p := New("testfile.txt")
+	defer p.Delete()
+
+	// Write test content to the file
+	if err := p.WriteFile(testContent); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Calculate the expected SHA1 hash
+	expectedHash := sha1.Sum(testContent)
+	expectedHashStr := hex.EncodeToString(expectedHash[:])
+
+	// Get the SHA1 hash from the method
+	hashStr := p.SHA1()
+
+	if hashStr != expectedHashStr {
+		t.Errorf("expected %s, got %s", expectedHashStr, hashStr)
+	}
+}
+
+func TestMD5(t *testing.T) {
+	p := New("testfile.txt")
+	defer p.Delete()
+
+	// Write test content to the file
+	if err := p.WriteFile(testContent); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Calculate the expected MD5 hash
+	expectedHash := md5.Sum(testContent)
+	expectedHashStr := hex.EncodeToString(expectedHash[:])
+
+	// Get the MD5 hash from the method
+	hashStr := p.MD5()
+
+	if hashStr != expectedHashStr {
+		t.Errorf("expected %s, got %s", expectedHashStr, hashStr)
+	}
+}
+
+func TestQueryHas(t *testing.T) {
+	tests := []struct {
+		path     Path
+		key      string
+		expected bool
+	}{
+		{New("/example/path/for/test?foo=bar"), "foo", true},
+		{New("/example/path/for/test?foo=bar&baz=qux"), "baz", true},
+		{New("/example/path/for/test?foo=bar&baz=qux"), "quux", false},
+		{New("/example/path/for/test"), "foo", false},
+		{New("/example/path/for/test?foo="), "foo", true},
+	}
+
+	for _, test := range tests {
+		result := test.path.QueryHas(test.key)
+		if result != test.expected {
+			t.Errorf("expected %v, got %v for path %s and key %s", test.expected, result, test.path, test.key)
+		}
+	}
+}
+
+func TestQueryDel(t *testing.T) {
+	tests := []struct {
+		path     Path
+		key      string
+		expected string
+	}{
+		{New("/example/path/for/test?foo=bar"), "foo", "/example/path/for/test"},
+		{New("/example/path/for/test?foo=bar&baz=qux"), "foo", "/example/path/for/test?baz=qux"},
+		{New("/example/path/for/test?foo=bar&baz=qux"), "baz", "/example/path/for/test?foo=bar"},
+		{New("/example/path/for/test?foo=bar&baz=qux"), "quux", "/example/path/for/test?baz=qux&foo=bar"},
+		{New("/example/path/for/test"), "foo", "/example/path/for/test"},
+		{New("/example/path/for/test?foo="), "foo", "/example/path/for/test"},
+	}
+
+	for _, test := range tests {
+		result := test.path.QueryDel(test.key)
+		if result.String() != test.expected {
+			t.Errorf("expected %s, got %s for path %s and key %s", test.expected, result.String(), test.path, test.key)
+		}
+	}
+}
+
+func TestQueryAdd(t *testing.T) {
+	tests := []struct {
+		path     Path
+		key      string
+		value    any
+		expected string
+	}{
+		{New("/example/path/for/test"), "foo", "bar", "/example/path/for/test?foo=bar"},
+		{New("/example/path/for/test?foo=bar"), "baz", "qux", "/example/path/for/test?foo=bar&baz=qux"},
+		{New("/example/path/for/test?foo=bar"), "foo", "baz", "/example/path/for/test?foo=bar&foo=baz"},
+		{New("/example/path/for/test"), "foo", 123, "/example/path/for/test?foo=123"},
+		{New("/example/path/for/test?foo=bar"), "baz", true, "/example/path/for/test?foo=bar&baz=true"},
+	}
+
+	for _, test := range tests {
+		result := test.path.QueryAdd(test.key, test.value)
+		if result.String() != test.expected {
+			t.Errorf("expected %s, got %s for path %s, key %s, and value %v", test.expected, result.String(), test.path, test.key, test.value)
+		}
+	}
+}
+
+func TestQuerySet(t *testing.T) {
+	tests := []struct {
+		path     Path
+		key      string
+		value    any
+		expected string
+	}{
+		{New("/example/path/for/test"), "foo", "bar", "/example/path/for/test?foo=bar"},
+		{New("/example/path/for/test?foo=bar"), "baz", "qux", "/example/path/for/test?foo=bar&baz=qux"},
+		{New("/example/path/for/test?foo=bar"), "foo", "baz", "/example/path/for/test?foo=baz"},
+		{New("/example/path/for/test"), "foo", 123, "/example/path/for/test?foo=123"},
+		{New("/example/path/for/test?foo=bar"), "baz", true, "/example/path/for/test?foo=bar&baz=true"},
+	}
+
+	for _, test := range tests {
+		result := test.path.QuerySet(test.key, test.value)
+		if result.String() != test.expected {
+			t.Errorf("expected %s, got %s for path %s, key %s, and value %v", test.expected, result.String(), test.path, test.key, test.value)
+		}
+	}
+}
+
+func TestQuery(t *testing.T) {
+	tests := []struct {
+		path     Path
+		expected string
+	}{
+		{New("/example/path/for/test?foo=bar"), "foo=bar"},
+		{New("/example/path/for/test?foo=bar&baz=qux"), "foo=bar&baz=qux"},
+		{New("/example/path/for/test"), ""},
+		{New("/example/path/for/test?"), ""},
+		{New("/example/path/for/test?foo="), "foo="},
+	}
+
+	for _, test := range tests {
+		result := test.path.Query()
+		if result != test.expected {
+			t.Errorf("expected %s, got %s for path %s", test.expected, result, test.path)
+		}
+	}
+}
+
+func TestWithQuery(t *testing.T) {
+	tests := []struct {
+		path     Path
+		query    string
+		expected string
+	}{
+		{New("/example/path/for/test"), "foo=bar", "/example/path/for/test?foo=bar"},
+		{New("/example/path/for/test?existing=query"), "foo=bar", "/example/path/for/test?foo=bar"},
+		{New("/example/path/for/test"), "", "/example/path/for/test"},
+		{New("/example/path/for/test?existing=query"), "", "/example/path/for/test"},
+		{New("/example/path/for/test"), "foo=bar&baz=qux", "/example/path/for/test?foo=bar&baz=qux"},
+	}
+
+	for _, test := range tests {
+		result := test.path.WithQuery(test.query)
+		if result.String() != test.expected {
+			t.Errorf("expected %s, got %s for path %s and query %s", test.expected, result.String(), test.path, test.query)
+		}
+	}
+}
+
+func TestWithoutQuery(t *testing.T) {
+	tests := []struct {
+		path     Path
+		expected string
+	}{
+		{New("/example/path/for/test?foo=bar"), "/example/path/for/test"},
+		{New("/example/path/for/test?foo=bar&baz=qux"), "/example/path/for/test"},
+		{New("/example/path/for/test"), "/example/path/for/test"},
+		{New("/example/path/for/test?"), "/example/path/for/test"},
+		{New("/example/path/for/test?foo="), "/example/path/for/test"},
+	}
+
+	for _, test := range tests {
+		result := test.path.WithoutQuery()
+		if result.String() != test.expected {
+			t.Errorf("expected %s, got %s for path %s", test.expected, result.String(), test.path)
+		}
+	}
+}
+
+func TestHasQuery(t *testing.T) {
+	tests := []struct {
+		path     Path
+		expected bool
+	}{
+		{New("/example/path/for/test?foo=bar"), true},
+		{New("/example/path/for/test?foo=bar&baz=qux"), true},
+		{New("/example/path/for/test"), false},
+		{New("/example/path/for/test?"), true},
+		{New("/example/path/for/test?foo="), true},
+	}
+
+	for _, test := range tests {
+		result := test.path.HasQuery()
+		if result != test.expected {
+			t.Errorf("expected %v, got %v for path %s", test.expected, result, test.path)
+		}
+	}
 }

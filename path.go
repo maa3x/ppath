@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/shirou/gopsutil/v4/disk"
 )
 
 type Path string
@@ -563,6 +565,27 @@ func (p Path) SHA1() string {
 
 func (p Path) SHA256() string {
 	return p.hashFile(sha256.New())
+}
+
+type Usage struct {
+	Total       uint64
+	Used        uint64
+	Free        uint64
+	UsedPercent float64
+}
+
+func (p Path) Usage() (u Usage, err error) {
+	var s *disk.UsageStat
+	if s, err = disk.Usage(string(p)); err != nil {
+		return Usage{}, err
+	}
+
+	return Usage{
+		Total:       s.Total,
+		Used:        s.Used,
+		Free:        s.Free,
+		UsedPercent: s.UsedPercent,
+	}, nil
 }
 
 func toString(v any) string {
