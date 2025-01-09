@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/shirou/gopsutil/v4/disk"
 )
@@ -572,6 +573,10 @@ type Usage struct {
 	Used        uint64
 	Free        uint64
 	UsedPercent float64
+}
+
+func (p Path) Times() (created, modified, accessed time.Time) {
+	return getTimes(string(p))
 }
 
 func (p Path) Usage() (u Usage, err error) {
