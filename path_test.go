@@ -1326,3 +1326,194 @@ func TestHasQuery(t *testing.T) {
 		}
 	}
 }
+
+func TestMergeMove_SourceDoesNotExist(t *testing.T) {
+	src := New("nonexistent.txt")
+	dst := New("dst.txt")
+	err := src.MergeMove(dst)
+	if err == nil {
+		t.Fatal("expected error for non-existent source, got nil")
+	}
+}
+
+func TestMergeMove_MoveFileToNonExistentDst(t *testing.T) {
+	// Create a temporary file as source
+	tempDir := t.TempDir()
+	srcPath := New(filepath.Join(tempDir, "src.txt"))
+	dstPath := New(filepath.Join(tempDir, "dst.txt"))
+
+	// Write some content to the source file
+	if err := srcPath.WriteFile([]byte("merge move test")); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Ensure destination does not exist
+	os.Remove(dstPath.String())
+
+	// Call MergeMove, should perform a rename
+	if err := srcPath.MergeMove(dstPath); err != nil {
+		t.Fatalf("MergeMove: %v", err)
+	}
+
+	// Source should no longer exist and destination file should now exist
+	if srcPath.Exists() {
+		t.Errorf("expected source file to be moved (non-existent)")
+	}
+	if !dstPath.Exists() {
+		t.Errorf("expected destination file to exist")
+	}
+}
+
+func TestMergeMove_MoveFileToExistingDirectory(t *testing.T) {
+	// Create a temporary file as source and a directory as destination
+	tempDir := t.TempDir()
+	srcPath := New(filepath.Join(tempDir, "src.txt"))
+	dstDir := New(filepath.Join(tempDir, "destDir"))
+
+	// Write content to the source file
+	if err := srcPath.WriteFile([]byte("file to dir")); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	// Create the destination directory
+	if err := dstDir.MkdirIfNotExist(); err != nil {
+		t.Fatalf("MkdirIfNotExist: %v", err)
+	}
+
+	// Call MergeMove; it should move src file inside dst directory
+	if err := srcPath.MergeMove(dstDir); err != nil {
+		t.Fatalf("MergeMove: %v", err)
+	}
+
+	// The moved file should now be at dstDir joined with base name of srcPath.
+	movedFile := dstDir.JoinPath(srcPath.Base())
+	if srcPath.Exists() {
+		t.Errorf("expected source file to be moved")
+	}
+	if !movedFile.Exists() {
+		t.Errorf("expected moved file (%s) to exist", movedFile.String())
+	}
+}
+
+func TestMergeMove_MoveFileToExistingFile(t *testing.T) {
+	tempDir := t.TempDir()
+	// Create a source and destination file paths
+	srcPath := New(filepath.Join(tempDir, "src.txt"))
+	dstPath := New(filepath.Join(tempDir, "dst.txt"))
+
+	// Write different contents to source and destination
+	srcContent := []byte("source content")
+	dstContent := []byte("old destination")
+
+	if err := srcPath.WriteFile(srcContent); err != nil {
+		t.Fatalf("WriteFile src: %v", err)
+	}
+	if err := dstPath.WriteFile(dstContent); err != nil {
+		t.Fatalf("WriteFile dst: %v", err)
+	}
+
+	// Call MergeMove: it should delete the destination and rename the source to dstPath.
+	if err := srcPath.MergeMove(dstPath); err != nil {
+		t.Fatalf("MergeMove: %v", err)
+	}
+
+	// Source should not exist, and destination should have source content.
+	if srcPath.Exists() {
+		t.Errorf("expected source file to be moved")
+	}
+	if !dstPath.Exists() {
+		t.Errorf("expected destination file to exist")
+	}
+	result, err := dstPath.ReadFile()
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(result) != string(srcContent) {
+		t.Errorf("expected destination file content %q, got %q", srcContent, result)
+	}
+}
+
+func TestMergeMove_MergeMoveDirectory(t *testing.T) {
+	tempDir := t.TempDir()
+	// Create source directory with multiple files
+	srcDir := New(filepath.Join(tempDir, "srcDir"))
+	if err := srcDir.MkdirIfNotExist(); err != nil {
+		t.Fatalf("MkdirIfNotExist srcDir: %v", err)
+	}
+
+	// Create a couple of files inside source directory
+	file1 := srcDir.Join("file1.txt")
+	file2 := srcDir.Join("file2.txt")
+	if err := file1.WriteFile([]byte("file1 content")); err != nil {
+		t.Fatalf("WriteFile file1: %v", err)
+	}
+	if err := file2.WriteFile([]byte("file2 content")); err != nil {
+		t.Fatalf("WriteFile file2: %v", err)
+	}
+
+	// Create destination directory where the merge will occur; it already exists
+	dstDir := New(filepath.Join(tempDir, "dstDir"))
+	if err := dstDir.MkdirIfNotExist(); err != nil {
+		t.Fatalf("MkdirIfNotExist dstDir: %v", err)
+	}
+
+	// MergeMove srcDir to dstDir; expect the files to be moved into dstDir
+	if err := srcDir.MergeMove(dstDir); err != nil {
+		t.Fatalf("MergeMove directory: %v", err)
+	}
+
+	// Source directory should be deleted.
+	if srcDir.Exists() {
+		t.Errorf("expected source directory to be deleted")
+	}
+
+	// Files should now exist in dstDir.
+	movedFile1 := dstDir.Join("file1.txt")
+	movedFile2 := dstDir.Join("file2.txt")
+	if !movedFile1.Exists() {
+		t.Errorf("expected moved file1 (%s) to exist", movedFile1.String())
+	}
+	if !movedFile2.Exists() {
+		t.Errorf("expected moved file2 (%s) to exist", movedFile2.String())
+	}
+
+	// Verify contents
+	f1Content, err := movedFile1.ReadFile()
+	if err != nil {
+		t.Fatalf("ReadFile file1: %v", err)
+	}
+	if string(f1Content) != "file1 content" {
+		t.Errorf("expected file1 content %q, got %q", "file1 content", f1Content)
+	}
+	f2Content, err := movedFile2.ReadFile()
+	if err != nil {
+		t.Fatalf("ReadFile file2: %v", err)
+	}
+	if string(f2Content) != "file2 content" {
+		t.Errorf("expected file2 content %q, got %q", "file2 content", f2Content)
+	}
+}
+
+func TestMergeMove_DirectoryToNonDirectory(t *testing.T) {
+	tempDir := t.TempDir()
+	// Create source directory with one file
+	srcDir := New(filepath.Join(tempDir, "srcDir"))
+	if err := srcDir.MkdirIfNotExist(); err != nil {
+		t.Fatalf("MkdirIfNotExist srcDir: %v", err)
+	}
+	srcFile := srcDir.Join("file.txt")
+	if err := srcFile.WriteFile([]byte("content")); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Create a destination regular file
+	dstPath := New(filepath.Join(tempDir, "dst.txt"))
+	if err := dstPath.WriteFile([]byte("destination")); err != nil {
+		t.Fatalf("WriteFile dst: %v", err)
+	}
+
+	// Attempting to merge move a directory into a non-directory should error.
+	err := srcDir.MergeMove(dstPath)
+	if err == nil {
+		t.Fatal("expected error when moving directory to non-directory, got nil")
+	}
+}

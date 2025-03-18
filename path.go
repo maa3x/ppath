@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"hash"
@@ -17,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maa3x/errz"
 	"github.com/shirou/gopsutil/v4/disk"
 )
 
@@ -182,6 +184,70 @@ func (p Path) Copy(dst Path) error {
 	return err
 }
 
+// MergeMove moves a file or directory from path p to dst.
+//   - If dst doesn't exist: performs a straight move
+//   - If p is a file and dst is a directory: moves p into dst
+//   - If p is a file and dst is a file: replaces dst with p
+//   - If p is a directory and dst is a directory: recursively merges contents
+func (p Path) MergeMove(dst Path) error {
+	if !p.Exists() {
+		return errz.E("source file does not exist")
+	}
+
+	if !dst.Exists() {
+		if err := dst.Dir().MkdirIfNotExist(); err != nil {
+			return errz.E(err, "create parent directory")
+		}
+		if err := os.Rename(string(p), string(dst)); err != nil {
+			return errz.E(err, "rename file")
+		}
+		return nil
+	}
+
+	if p.IsRegular() {
+		if dst.IsDir() {
+			dst = dst.JoinPath(p.Base())
+			if err := os.Rename(string(p), string(dst)); err != nil {
+				return errz.E(err, "rename file")
+			}
+			return nil
+		}
+		if !dst.IsRegular() {
+			return errz.E("destination is not a regular file")
+		}
+
+		if err := dst.Delete(); err != nil {
+			return errz.E(err, "delete old file")
+		}
+		if err := os.Rename(string(p), string(dst)); err != nil {
+			return errz.E(err, "rename file")
+		}
+		return nil
+	}
+
+	if !p.IsDir() {
+		return errz.E("source must be a regular file or directory")
+	}
+	if !dst.IsDir() {
+		return errz.E("destination is not a directory")
+	}
+
+	entries, err := p.ReadDir()
+	if err != nil {
+		return errz.E(err, "reading directory entries")
+	}
+	for i := range entries {
+		entryName := entries[i].Name()
+		srcPath := p.Join(entryName)
+		dstPath := dst.Join(entryName)
+		if err := srcPath.MergeMove(dstPath); err != nil {
+			return errz.E(err, "move file", "name", entryName)
+		}
+	}
+
+	return p.Delete()
+}
+
 func (p Path) Move(dst Path) error {
 	if !p.IsExist() {
 		return errors.New("source file does not exist")
@@ -192,6 +258,21 @@ func (p Path) Move(dst Path) error {
 	}
 
 	return p.Rename(dst.String())
+}
+
+func (p Path) Truncate() error {
+	if p.IsRegular() {
+		return errz.If(os.Truncate(string(p), 0), "truncate file")
+	}
+
+	if p.IsDir() {
+		if err := p.Delete(); err != nil {
+			return errz.E(err, "delete directory")
+		}
+		return errz.If(p.MkdirIfNotExist(), "recreate directory")
+	}
+
+	return errz.E("unsupported target")
 }
 
 func (p Path) OpenFile(flag int, perm os.FileMode) (*os.File, error) {
@@ -283,15 +364,24 @@ func (p Path) WriteFile(data []byte) error {
 	return os.WriteFile(string(p), data, 0o644)
 }
 
-func (p Path) WriteTo(w io.Writer) error {
+func (p Path) WriteJSON(v any) error {
+	f, err := p.OpenFile(os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	if err != nil {
+		return errz.E(err, "open file")
+	}
+	defer f.Close()
+
+	return json.NewEncoder(f).Encode(v)
+}
+
+func (p Path) WriteTo(w io.Writer) (int64, error) {
 	src, err := p.Open()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer src.Close()
 
-	_, err = src.WriteTo(w)
-	return err
+	return src.WriteTo(w)
 }
 
 func (p Path) WriteToPath(p2 Path) error {
@@ -301,7 +391,8 @@ func (p Path) WriteToPath(p2 Path) error {
 	}
 	defer dest.Close()
 
-	return p.WriteTo(dest)
+	_, err = p.WriteTo(dest)
+	return err
 }
 
 func (p Path) IsAbs() bool {
