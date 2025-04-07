@@ -3,8 +3,8 @@ github.com/ebitengine/purego v0.8.1/go.mod h1:iIjxzd6CiRiOG0UyXP+V1+jWqUXVjPKLAI
 github.com/go-ole/go-ole v1.2.6/go.mod h1:pprOEPIfldk/42T2oK7lQ4v4JSDwmV0As9GaiUsvbm0=
 github.com/go-ole/go-ole v1.3.0 h1:Dt6ye7+vXGIKZ7Xtk4s6/xVdGDQynvom7xCFEdWr6uE=
 github.com/go-ole/go-ole v1.3.0/go.mod h1:5LS6F96DhAwUc7C+1HLexzMXY1xGRSryjyPPKW6zv78=
-github.com/maa3x/errz v0.3.0 h1:89/hGWDjs2PT9iLiPwS2F95PbEHNHZ8MDKuci/ltR8w=
-github.com/maa3x/errz v0.3.0/go.mod h1:G99s9Whr67XaXjGRS8cpu4faOBIJcTQEDkfcyBS6ZB8=
+github.com/maa3x/errz v0.3.1 h1:nTR21Xq30emb903Af53JDHHrubE855Drexy8soVCGgU=
+github.com/maa3x/errz v0.3.1/go.mod h1:G99s9Whr67XaXjGRS8cpu4faOBIJcTQEDkfcyBS6ZB8=
 github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=
 github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
 github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 h1:o4JXh1EVt9k/+g42oCprj/FisM4qX9L3sZB3upGN2ZU=
