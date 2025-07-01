@@ -54,6 +54,23 @@ func ThisDir() Path {
 	return WD()
 }
 
+func Temp(dirs ...string) Path {
+	f, err := TempFile("", dirs...)
+	if err != nil {
+		return New()
+	}
+	f.Close()
+	return New(f.Name())
+}
+
+func TempFile(pattern string, dirs ...string) (*os.File, error) {
+	return os.CreateTemp(filepath.Join(dirs...), pattern)
+}
+
+func TempDir(dirs ...string) Path {
+	return New(append([]string{os.TempDir()}, dirs...)...)
+}
+
 func (p Path) String() string {
 	return string(p)
 }
