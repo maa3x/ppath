@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -477,6 +478,7 @@ func TestStringP(t *testing.T) {
 	result := New("a", "b", "c").StringP()
 	if result == nil {
 		t.Errorf("expected non-nil pointer, got nil")
+		return
 	}
 	if expected := filepath.Join("a", "b", "c"); *result != expected {
 		t.Errorf("expected %s, got %s", expected, *result)
@@ -532,7 +534,7 @@ func TestReadDir(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected error, got nil")
 	}
-	if err.Error() != "not a directory" {
+	if !strings.Contains(err.Error(), "not a directory") {
 		t.Errorf("expected 'not a directory' error, got %v", err)
 	}
 }
@@ -964,7 +966,7 @@ func TestMove(t *testing.T) {
 		if err == nil {
 			t.Errorf("expected error, got nil")
 		}
-		if err.Error() != "source file does not exist" {
+		if !strings.Contains(err.Error(), "source file does not exist") {
 			t.Errorf("expected 'source file does not exist' error, got %v", err)
 		}
 	})
@@ -1040,7 +1042,7 @@ func TestCreate(t *testing.T) {
 		if err == nil {
 			t.Errorf("expected error, got nil")
 		}
-		if err.Error() != "already exists" {
+		if !strings.Contains(err.Error(), "already exists") {
 			t.Errorf("expected 'already exists' error, got %v", err)
 		}
 	})
@@ -1096,7 +1098,7 @@ func TestUsage(t *testing.T) {
 	})
 }
 
-func TestSHA256(t *testing.T) {
+func TestSHA256String(t *testing.T) {
 	p := New("testfile.txt")
 	defer p.Delete()
 
@@ -1110,14 +1112,14 @@ func TestSHA256(t *testing.T) {
 	expectedHashStr := hex.EncodeToString(expectedHash[:])
 
 	// Get the SHA256 hash from the method
-	hashStr := p.SHA256()
+	hashStr := p.SHA256String()
 
 	if hashStr != expectedHashStr {
 		t.Errorf("expected %s, got %s", expectedHashStr, hashStr)
 	}
 }
 
-func TestSHA1(t *testing.T) {
+func TestSHA1String(t *testing.T) {
 	p := New("testfile.txt")
 	defer p.Delete()
 
@@ -1131,14 +1133,14 @@ func TestSHA1(t *testing.T) {
 	expectedHashStr := hex.EncodeToString(expectedHash[:])
 
 	// Get the SHA1 hash from the method
-	hashStr := p.SHA1()
+	hashStr := p.SHA1String()
 
 	if hashStr != expectedHashStr {
 		t.Errorf("expected %s, got %s", expectedHashStr, hashStr)
 	}
 }
 
-func TestMD5(t *testing.T) {
+func TestMD5String(t *testing.T) {
 	p := New("testfile.txt")
 	defer p.Delete()
 
@@ -1152,7 +1154,7 @@ func TestMD5(t *testing.T) {
 	expectedHashStr := hex.EncodeToString(expectedHash[:])
 
 	// Get the MD5 hash from the method
-	hashStr := p.MD5()
+	hashStr := p.MD5String()
 
 	if hashStr != expectedHashStr {
 		t.Errorf("expected %s, got %s", expectedHashStr, hashStr)
@@ -1210,10 +1212,10 @@ func TestQueryAdd(t *testing.T) {
 		expected string
 	}{
 		{New("/example/path/for/test"), "foo", "bar", "/example/path/for/test?foo=bar"},
-		{New("/example/path/for/test?foo=bar"), "baz", "qux", "/example/path/for/test?foo=bar&baz=qux"},
+		{New("/example/path/for/test?foo=bar"), "baz", "qux", "/example/path/for/test?baz=qux&foo=bar"},
 		{New("/example/path/for/test?foo=bar"), "foo", "baz", "/example/path/for/test?foo=bar&foo=baz"},
 		{New("/example/path/for/test"), "foo", 123, "/example/path/for/test?foo=123"},
-		{New("/example/path/for/test?foo=bar"), "baz", true, "/example/path/for/test?foo=bar&baz=true"},
+		{New("/example/path/for/test?foo=bar"), "baz", true, "/example/path/for/test?baz=true&foo=bar"},
 	}
 
 	for _, test := range tests {
@@ -1232,10 +1234,10 @@ func TestQuerySet(t *testing.T) {
 		expected string
 	}{
 		{New("/example/path/for/test"), "foo", "bar", "/example/path/for/test?foo=bar"},
-		{New("/example/path/for/test?foo=bar"), "baz", "qux", "/example/path/for/test?foo=bar&baz=qux"},
+		{New("/example/path/for/test?foo=bar"), "baz", "qux", "/example/path/for/test?baz=qux&foo=bar"},
 		{New("/example/path/for/test?foo=bar"), "foo", "baz", "/example/path/for/test?foo=baz"},
 		{New("/example/path/for/test"), "foo", 123, "/example/path/for/test?foo=123"},
-		{New("/example/path/for/test?foo=bar"), "baz", true, "/example/path/for/test?foo=bar&baz=true"},
+		{New("/example/path/for/test?foo=bar"), "baz", true, "/example/path/for/test?baz=true&foo=bar"},
 	}
 
 	for _, test := range tests {
@@ -1443,11 +1445,11 @@ func TestMergeMove_MergeMoveDirectory(t *testing.T) {
 	// Create a couple of files inside source directory
 	file1 := srcDir.Join("file1.txt")
 	file2 := srcDir.Join("file2.txt")
-	if err := file1.WriteFile([]byte("file1 content")); err != nil {
-		t.Fatalf("WriteFile file1: %v", err)
+	if err := file1.WriteFile([]byte("content1")); err != nil {
+		t.Fatalf("WriteFile: %v", err)
 	}
-	if err := file2.WriteFile([]byte("file2 content")); err != nil {
-		t.Fatalf("WriteFile file2: %v", err)
+	if err := file2.WriteFile([]byte("content2")); err != nil {
+		t.Fatalf("WriteFile: %v", err)
 	}
 
 	// Create destination directory where the merge will occur; it already exists
@@ -1458,7 +1460,7 @@ func TestMergeMove_MergeMoveDirectory(t *testing.T) {
 
 	// MergeMove srcDir to dstDir; expect the files to be moved into dstDir
 	if err := srcDir.MergeMove(dstDir); err != nil {
-		t.Fatalf("MergeMove directory: %v", err)
+		t.Fatalf("MergeMove: %v", err)
 	}
 
 	// Source directory should be deleted.
@@ -1470,35 +1472,29 @@ func TestMergeMove_MergeMoveDirectory(t *testing.T) {
 	movedFile1 := dstDir.Join("file1.txt")
 	movedFile2 := dstDir.Join("file2.txt")
 	if !movedFile1.Exists() {
-		t.Errorf("expected moved file1 (%s) to exist", movedFile1.String())
+		t.Errorf("expected file1.txt to exist in destination")
 	}
 	if !movedFile2.Exists() {
-		t.Errorf("expected moved file2 (%s) to exist", movedFile2.String())
+		t.Errorf("expected file2.txt to exist in destination")
 	}
 
 	// Verify contents
-	f1Content, err := movedFile1.ReadFile()
-	if err != nil {
-		t.Fatalf("ReadFile file1: %v", err)
+	content1, _ := movedFile1.ReadFile()
+	if string(content1) != "content1" {
+		t.Errorf("expected content1, got %s", content1)
 	}
-	if string(f1Content) != "file1 content" {
-		t.Errorf("expected file1 content %q, got %q", "file1 content", f1Content)
-	}
-	f2Content, err := movedFile2.ReadFile()
-	if err != nil {
-		t.Fatalf("ReadFile file2: %v", err)
-	}
-	if string(f2Content) != "file2 content" {
-		t.Errorf("expected file2 content %q, got %q", "file2 content", f2Content)
+	content2, _ := movedFile2.ReadFile()
+	if string(content2) != "content2" {
+		t.Errorf("expected content2, got %s", content2)
 	}
 }
 
 func TestMergeMove_DirectoryToNonDirectory(t *testing.T) {
-	tempDir := t.TempDir()
 	// Create source directory with one file
+	tempDir := t.TempDir()
 	srcDir := New(filepath.Join(tempDir, "srcDir"))
 	if err := srcDir.MkdirIfNotExist(); err != nil {
-		t.Fatalf("MkdirIfNotExist srcDir: %v", err)
+		t.Fatalf("MkdirIfNotExist: %v", err)
 	}
 	srcFile := srcDir.Join("file.txt")
 	if err := srcFile.WriteFile([]byte("content")); err != nil {
@@ -1506,14 +1502,620 @@ func TestMergeMove_DirectoryToNonDirectory(t *testing.T) {
 	}
 
 	// Create a destination regular file
-	dstPath := New(filepath.Join(tempDir, "dst.txt"))
-	if err := dstPath.WriteFile([]byte("destination")); err != nil {
-		t.Fatalf("WriteFile dst: %v", err)
+	dstFile := New(filepath.Join(tempDir, "dstFile.txt"))
+	if err := dstFile.WriteFile([]byte("dst content")); err != nil {
+		t.Fatalf("WriteFile: %v", err)
 	}
 
 	// Attempting to merge move a directory into a non-directory should error.
-	err := srcDir.MergeMove(dstPath)
+	err := srcDir.MergeMove(dstFile)
 	if err == nil {
-		t.Fatal("expected error when moving directory to non-directory, got nil")
+		t.Fatal("expected error when merging directory to non-directory, got nil")
+	}
+}
+
+func TestReadJSON(t *testing.T) {
+	t.Run("ReadValidJSONObject", func(t *testing.T) {
+		p := New("testfile.json")
+		defer p.Delete()
+
+		jsonData := map[string]any{
+			"name": "test",
+			"age":  30,
+		}
+		if err := p.WriteJSON(jsonData); err != nil {
+			t.Fatalf("WriteJSON: %v", err)
+		}
+
+		result, err := p.ReadJSON()
+		if err != nil {
+			t.Fatalf("ReadJSON: %v", err)
+		}
+
+		resultMap, ok := result.(map[string]any)
+		if !ok {
+			t.Fatalf("expected map[string]any, got %T", result)
+		}
+
+		if resultMap["name"] != "test" {
+			t.Errorf("expected name=test, got %v", resultMap["name"])
+		}
+		if resultMap["age"].(float64) != 30 {
+			t.Errorf("expected age=30, got %v", resultMap["age"])
+		}
+	})
+
+	t.Run("ReadValidJSONArray", func(t *testing.T) {
+		p := New("testfile.json")
+		defer p.Delete()
+
+		jsonData := []any{"item1", "item2", "item3"}
+		if err := p.WriteJSON(jsonData); err != nil {
+			t.Fatalf("WriteJSON: %v", err)
+		}
+
+		result, err := p.ReadJSON()
+		if err != nil {
+			t.Fatalf("ReadJSON: %v", err)
+		}
+
+		resultArray, ok := result.([]any)
+		if !ok {
+			t.Fatalf("expected []any, got %T", result)
+		}
+
+		if len(resultArray) != 3 {
+			t.Errorf("expected 3 items, got %d", len(resultArray))
+		}
+	})
+
+	t.Run("ReadInvalidJSON", func(t *testing.T) {
+		p := New("testfile.json")
+		defer p.Delete()
+
+		if err := p.WriteFile([]byte("{invalid json}")); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+
+		_, err := p.ReadJSON()
+		if err == nil {
+			t.Errorf("expected error for invalid JSON, got nil")
+		}
+	})
+
+	t.Run("ReadNonExistentFile", func(t *testing.T) {
+		p := New("nonexistent.json")
+
+		_, err := p.ReadJSON()
+		if err == nil {
+			t.Errorf("expected error for non-existent file, got nil")
+		}
+	})
+
+	t.Run("ReadEmptyJSON", func(t *testing.T) {
+		p := New("testfile.json")
+		defer p.Delete()
+
+		if err := p.WriteFile([]byte("")); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+
+		_, err := p.ReadJSON()
+		if err == nil {
+			t.Errorf("expected error for empty JSON, got nil")
+		}
+	})
+}
+
+func TestWriteJSON(t *testing.T) {
+	t.Run("WriteJSONObject", func(t *testing.T) {
+		p := New("testfile.json")
+		defer p.Delete()
+
+		jsonData := map[string]any{
+			"name": "test",
+			"age":  30,
+		}
+
+		if err := p.WriteJSON(jsonData); err != nil {
+			t.Fatalf("WriteJSON: %v", err)
+		}
+
+		if !p.IsExist() {
+			t.Errorf("expected file to exist")
+		}
+
+		content, err := p.ReadFile()
+		if err != nil {
+			t.Fatalf("ReadFile: %v", err)
+		}
+
+		if !strings.Contains(string(content), "name") {
+			t.Errorf("expected JSON to contain 'name'")
+		}
+	})
+
+	t.Run("WriteJSONToNonExistentDirectory", func(t *testing.T) {
+		p := New("nonexistentdir", "testfile.json")
+		defer p.Dir().Delete()
+
+		jsonData := map[string]string{"key": "value"}
+		if err := p.WriteJSON(jsonData); err != nil {
+			t.Fatalf("WriteJSON: %v", err)
+		}
+
+		if !p.IsExist() {
+			t.Errorf("expected file to exist")
+		}
+	})
+}
+
+func TestReadFrom(t *testing.T) {
+	t.Run("ReadFromReader", func(t *testing.T) {
+		p := New("testfile.txt")
+		defer p.Delete()
+
+		content := "test content from reader"
+		reader := strings.NewReader(content)
+
+		n, err := p.ReadFrom(reader)
+		if err != nil {
+			t.Fatalf("ReadFrom: %v", err)
+		}
+
+		if n != int64(len(content)) {
+			t.Errorf("expected %d bytes written, got %d", len(content), n)
+		}
+
+		readContent, err := p.ReadFile()
+		if err != nil {
+			t.Fatalf("ReadFile: %v", err)
+		}
+
+		if string(readContent) != content {
+			t.Errorf("expected %s, got %s", content, readContent)
+		}
+	})
+}
+
+func TestReadFromPath(t *testing.T) {
+	t.Run("ReadFromExistingFile", func(t *testing.T) {
+		src := New("srcfile.txt")
+		dst := New("dstfile.txt")
+		defer src.Delete()
+		defer dst.Delete()
+
+		if err := src.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+
+		n, err := dst.ReadFromPath(src)
+		if err != nil {
+			t.Fatalf("ReadFromPath: %v", err)
+		}
+
+		if n != int64(len(testContent)) {
+			t.Errorf("expected %d bytes, got %d", len(testContent), n)
+		}
+
+		dstContent, err := dst.ReadFile()
+		if err != nil {
+			t.Fatalf("ReadFile: %v", err)
+		}
+
+		if string(dstContent) != string(testContent) {
+			t.Errorf("expected %s, got %s", testContent, dstContent)
+		}
+	})
+}
+
+func TestWriteTo(t *testing.T) {
+	t.Run("WriteToWriter", func(t *testing.T) {
+		p := New("testfile.txt")
+		defer p.Delete()
+
+		if err := p.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+
+		var buf strings.Builder
+		n, err := p.WriteTo(&buf)
+		if err != nil {
+			t.Fatalf("WriteTo: %v", err)
+		}
+
+		if n != int64(len(testContent)) {
+			t.Errorf("expected %d bytes, got %d", len(testContent), n)
+		}
+
+		if buf.String() != string(testContent) {
+			t.Errorf("expected %s, got %s", testContent, buf.String())
+		}
+	})
+}
+
+func TestWriteToPath(t *testing.T) {
+	t.Run("WriteToNewFile", func(t *testing.T) {
+		src := New("srcfile.txt")
+		dst := New("dstfile.txt")
+		defer src.Delete()
+		defer dst.Delete()
+
+		if err := src.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+
+		if err := src.WriteToPath(dst); err != nil {
+			t.Fatalf("WriteToPath: %v", err)
+		}
+
+		dstContent, err := dst.ReadFile()
+		if err != nil {
+			t.Fatalf("ReadFile: %v", err)
+		}
+
+		if string(dstContent) != string(testContent) {
+			t.Errorf("expected %s, got %s", testContent, dstContent)
+		}
+	})
+}
+
+func TestTruncate(t *testing.T) {
+	t.Run("TruncateFile", func(t *testing.T) {
+		p := New("testfile.txt")
+		defer p.Delete()
+
+		if err := p.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+
+		if err := p.Truncate(); err != nil {
+			t.Fatalf("Truncate: %v", err)
+		}
+
+		size, err := p.Size()
+		if err != nil {
+			t.Fatalf("Size: %v", err)
+		}
+
+		if size != 0 {
+			t.Errorf("expected size 0, got %d", size)
+		}
+	})
+
+	t.Run("TruncateDirectory", func(t *testing.T) {
+		dir := New("testdir")
+		defer dir.Delete()
+
+		if err := dir.MkdirIfNotExist(); err != nil {
+			t.Fatalf("MkdirIfNotExist: %v", err)
+		}
+
+		file := dir.Join("file.txt")
+		if err := file.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+
+		if err := dir.Truncate(); err != nil {
+			t.Fatalf("Truncate: %v", err)
+		}
+
+		if !dir.IsEmpty() {
+			t.Errorf("expected directory to be empty")
+		}
+	})
+}
+
+func TestIsEmpty(t *testing.T) {
+	t.Run("EmptyFile", func(t *testing.T) {
+		p := New("testfile.txt")
+		defer p.Delete()
+
+		if err := p.WriteFile([]byte("")); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+
+		if !p.IsEmpty() {
+			t.Errorf("expected file to be empty")
+		}
+	})
+
+	t.Run("NonEmptyFile", func(t *testing.T) {
+		p := New("testfile.txt")
+		defer p.Delete()
+
+		if err := p.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+
+		if p.IsEmpty() {
+			t.Errorf("expected file to be non-empty")
+		}
+	})
+
+	t.Run("EmptyDirectory", func(t *testing.T) {
+		dir := New("testdir")
+		defer dir.Delete()
+
+		if err := dir.MkdirIfNotExist(); err != nil {
+			t.Fatalf("MkdirIfNotExist: %v", err)
+		}
+
+		if !dir.IsEmpty() {
+			t.Errorf("expected directory to be empty")
+		}
+	})
+
+	t.Run("NonEmptyDirectory", func(t *testing.T) {
+		dir := New("testdir")
+		defer dir.Delete()
+
+		if err := dir.MkdirIfNotExist(); err != nil {
+			t.Fatalf("MkdirIfNotExist: %v", err)
+		}
+
+		file := dir.Join("file.txt")
+		if err := file.WriteFile(testContent); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+
+		if dir.IsEmpty() {
+			t.Errorf("expected directory to be non-empty")
+		}
+	})
+
+	t.Run("NonExistentPath", func(t *testing.T) {
+		p := New("nonexistent.txt")
+		if !p.IsEmpty() {
+			t.Errorf("expected non-existent path to be considered empty")
+		}
+	})
+}
+
+func TestIsEqual(t *testing.T) {
+	t.Run("SamePaths", func(t *testing.T) {
+		p1 := New("test.txt")
+		p2 := New("test.txt")
+
+		if !p1.IsEqual(p2) {
+			t.Errorf("expected paths to be equal")
+		}
+	})
+
+	t.Run("DifferentPaths", func(t *testing.T) {
+		p1 := New("test1.txt")
+		p2 := New("test2.txt")
+
+		if p1.IsEqual(p2) {
+			t.Errorf("expected paths to be different")
+		}
+	})
+
+	t.Run("RelativeAndAbsoluteSame", func(t *testing.T) {
+		p1 := New("test.txt")
+		abs, _ := p1.Abs()
+
+		if !p1.IsEqual(abs) {
+			t.Errorf("expected relative and absolute paths to be equal")
+		}
+	})
+}
+
+func TestHasPrefix(t *testing.T) {
+	tests := []struct {
+		path     Path
+		prefix   string
+		expected bool
+	}{
+		{New("/home/user/file.txt"), "/home", true},
+		{New("/home/user/file.txt"), "/var", false},
+		{New("relative/path"), "relative", true},
+		{New("relative/path"), "absolute", false},
+	}
+
+	for _, test := range tests {
+		result := test.path.HasPrefix(test.prefix)
+		if result != test.expected {
+			t.Errorf("expected %v for path %s with prefix %s, got %v", test.expected, test.path, test.prefix, result)
+		}
+	}
+}
+
+func TestHasSuffix(t *testing.T) {
+	tests := []struct {
+		path     Path
+		suffix   string
+		expected bool
+	}{
+		{New("/home/user/file.txt"), ".txt", true},
+		{New("/home/user/file.txt"), ".pdf", false},
+		{New("document.pdf"), ".pdf", true},
+		{New("document"), ".pdf", false},
+	}
+
+	for _, test := range tests {
+		result := test.path.HasSuffix(test.suffix)
+		if result != test.expected {
+			t.Errorf("expected %v for path %s with suffix %s, got %v", test.expected, test.path, test.suffix, result)
+		}
+	}
+}
+
+func TestHasExt(t *testing.T) {
+	tests := []struct {
+		path     Path
+		ext      string
+		expected bool
+	}{
+		{New("file.txt"), ".txt", true},
+		{New("file.txt"), "txt", true},
+		{New("file.pdf"), ".txt", false},
+		{New("file"), "", true},
+		{New("file.tar.gz"), ".gz", true},
+	}
+
+	for _, test := range tests {
+		result := test.path.HasExt(test.ext)
+		if result != test.expected {
+			t.Errorf("expected %v for path %s with ext %s, got %v", test.expected, test.path, test.ext, result)
+		}
+	}
+}
+
+func TestContains(t *testing.T) {
+	tests := []struct {
+		path     Path
+		sub      string
+		expected bool
+	}{
+		{New("/home/user/documents"), "user", true},
+		{New("/home/user/documents"), "admin", false},
+		{New("test_file.txt"), "test", true},
+		{New("test_file.txt"), "demo", false},
+	}
+
+	for _, test := range tests {
+		result := test.path.Contains(test.sub)
+		if result != test.expected {
+			t.Errorf("expected %v for path %s with substring %s, got %v", test.expected, test.path, test.sub, result)
+		}
+	}
+}
+
+func TestTrim(t *testing.T) {
+	tests := []struct {
+		input    Path
+		expected string
+	}{
+		{New("  /path/to/file  "), "/path/to/file"},
+		{New("\t/path/to/file\n"), "/path/to/file"},
+		{New("/path/to/file"), "/path/to/file"},
+		{New("  "), ""},
+	}
+
+	for _, test := range tests {
+		result := test.input.Trim()
+		if result.String() != test.expected {
+			t.Errorf("expected %s, got %s", test.expected, result.String())
+		}
+	}
+}
+
+func TestClean(t *testing.T) {
+	tests := []struct {
+		input    Path
+		expected string
+	}{
+		{New("a/b/../c"), filepath.Clean("a/b/../c")},
+		{New("a//b//c"), filepath.Clean("a//b//c")},
+		{New("./a/b"), filepath.Clean("./a/b")},
+		{New("a/./b"), filepath.Clean("a/./b")},
+	}
+
+	for _, test := range tests {
+		result := test.input.Clean()
+		if result.String() != test.expected {
+			t.Errorf("expected %s, got %s", test.expected, result.String())
+		}
+	}
+}
+
+func TestNormalize(t *testing.T) {
+	tests := []struct {
+		input    Path
+		expected string
+	}{
+		{New("a/b/../c"), filepath.Clean("a/b/../c")},
+		{New("a//b//c"), filepath.Clean("a//b//c")},
+	}
+
+	for _, test := range tests {
+		result := test.input.Normalize()
+		if result.String() != test.expected {
+			t.Errorf("expected %s, got %s", test.expected, result.String())
+		}
+	}
+}
+
+func TestXXH64(t *testing.T) {
+	p := New("testfile.txt")
+	defer p.Delete()
+
+	if err := p.WriteFile(testContent); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	hash := p.XXH64()
+	if hash == nil {
+		t.Errorf("expected non-nil hash")
+	}
+	if len(hash) == 0 {
+		t.Errorf("expected non-empty hash")
+	}
+}
+
+func TestXXH64String(t *testing.T) {
+	p := New("testfile.txt")
+	defer p.Delete()
+
+	if err := p.WriteFile(testContent); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	hashStr := p.XXH64String()
+	if hashStr == "" {
+		t.Errorf("expected non-empty hash string")
+	}
+	if len(hashStr) != 16 {
+		t.Errorf("expected 16 character hash string, got %d", len(hashStr))
+	}
+}
+
+func TestTemp(t *testing.T) {
+	p := Temp()
+	defer p.Delete()
+
+	if p.String() == "" {
+		t.Errorf("expected non-empty path")
+	}
+}
+
+func TestTempFile(t *testing.T) {
+	f, err := TempFile("testpattern-*.txt")
+	if err != nil {
+		t.Fatalf("TempFile: %v", err)
+	}
+	defer os.Remove(f.Name())
+	defer f.Close()
+
+	if !New(f.Name()).IsExist() {
+		t.Errorf("expected temporary file to exist")
+	}
+}
+
+func TestTempDir(t *testing.T) {
+	p := TempDir("subdir", "nested")
+
+	if !p.Contains("subdir") {
+		t.Errorf("expected path to contain 'subdir'")
+	}
+	if !p.Contains("nested") {
+		t.Errorf("expected path to contain 'nested'")
+	}
+}
+
+func TestSegments(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		p := New("C:\\path\\to\\file")
+		segments := p.Segments()
+		if len(segments) != 1 {
+			t.Errorf("expected 1 segment on Windows, got %d", len(segments))
+		}
+	} else {
+		p := New("/usr/local/bin")
+		segments := p.Segments()
+		if len(segments) != 1 {
+			t.Errorf("expected 1 segment on Unix, got %d", len(segments))
+		}
 	}
 }

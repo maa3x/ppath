@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -18,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cespare/xxhash/v2"
 	"github.com/maa3x/errz"
 	"github.com/shirou/gopsutil/v4/disk"
 )
@@ -267,7 +267,7 @@ func (p Path) MergeMove(dst Path) error {
 
 func (p Path) Move(dst Path) error {
 	if !p.IsExist() {
-		return errors.New("source file does not exist")
+		return errz.E("source file does not exist")
 	}
 
 	if err := dst.Dir().MkdirIfNotExist(); err != nil {
@@ -279,14 +279,20 @@ func (p Path) Move(dst Path) error {
 
 func (p Path) Truncate() error {
 	if p.IsRegular() {
-		return errz.If(os.Truncate(string(p), 0), "truncate file")
+		if err := os.Truncate(string(p), 0); err != nil {
+			return errz.E("truncate file", err)
+		}
+		return nil
 	}
 
 	if p.IsDir() {
 		if err := p.Delete(); err != nil {
 			return errz.E(err, "delete directory")
 		}
-		return errz.If(p.MkdirIfNotExist(), "recreate directory")
+		if err := p.MkdirIfNotExist(); err != nil {
+			return errz.E("recreate directory", err)
+		}
+		return nil
 	}
 
 	return errz.E("unsupported target")
@@ -294,7 +300,7 @@ func (p Path) Truncate() error {
 
 func (p Path) OpenFile(flag int, perm os.FileMode) (*os.File, error) {
 	if p.IsDir() {
-		return nil, errors.New("can not open a directory")
+		return nil, errz.E("can not open a directory")
 	}
 	if err := p.Dir().MkdirIfNotExist(); err != nil {
 		return nil, fmt.Errorf("create parent directory: %w", err)
@@ -312,7 +318,7 @@ func (p Path) OpenOrCreate() (*os.File, error) {
 
 func (p Path) Create() (*os.File, error) {
 	if p.IsExist() {
-		return nil, errors.New("already exists")
+		return nil, errz.E("already exists")
 	}
 
 	if err := p.Dir().MkdirIfNotExist(); err != nil {
@@ -328,7 +334,7 @@ func (p Path) MkdirIfNotExist() error {
 	}
 
 	if !p.IsDir() {
-		return errors.New("already exists but not a directory")
+		return errz.E("already exists but not a directory")
 	}
 
 	return nil
@@ -336,7 +342,7 @@ func (p Path) MkdirIfNotExist() error {
 
 func (p Path) ReadDir() ([]fs.DirEntry, error) {
 	if !p.IsDir() {
-		return nil, errors.New("not a directory")
+		return nil, errz.E("not a directory")
 	}
 
 	entries, err := os.ReadDir(string(p))
@@ -350,21 +356,31 @@ func (p Path) ReadFile() ([]byte, error) {
 	return os.ReadFile(string(p))
 }
 
-func (p Path) ReadFrom(r io.Reader) error {
+func (p Path) ReadJSON() (any, error) {
+	f, err := os.Open(string(p))
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	var v any
+	err = json.NewDecoder(f).Decode(&v)
+	return v, err
+}
+
+func (p Path) ReadFrom(r io.Reader) (int64, error) {
 	dest, err := p.Create()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer dest.Close()
 
-	_, err = dest.ReadFrom(r)
-	return err
+	return dest.ReadFrom(r)
 }
 
-func (p Path) ReadFromPath(p2 Path) error {
+func (p Path) ReadFromPath(p2 Path) (int64, error) {
 	src, err := p2.Open()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer src.Close()
 
@@ -373,7 +389,7 @@ func (p Path) ReadFromPath(p2 Path) error {
 
 func (p Path) WriteFile(data []byte) error {
 	if p.IsDir() {
-		return errors.New("can not write to a directory")
+		return errz.E("can not write to a directory")
 	}
 	if err := p.Dir().MkdirIfNotExist(); err != nil {
 		return fmt.Errorf("create parent directory: %w", err)
@@ -654,26 +670,53 @@ func (p Path) QueryHas(k string) bool {
 	return false
 }
 
-func (p Path) hashFile(h hash.Hash) string {
-	f, err := p.Open()
+func (p Path) hashFile(h hash.Hash) []byte {
+	f, err := os.Open(string(p))
 	if err != nil {
-		return ""
+		return nil
 	}
 	f.WriteTo(h)
 	f.Close()
-	return hex.EncodeToString(h.Sum(nil))
+	return h.Sum(nil)
 }
 
-func (p Path) MD5() string {
+func (p Path) MD5() []byte {
 	return p.hashFile(md5.New())
 }
 
-func (p Path) SHA1() string {
+func (p Path) SHA1() []byte {
 	return p.hashFile(sha1.New())
 }
 
-func (p Path) SHA256() string {
+func (p Path) SHA256() []byte {
 	return p.hashFile(sha256.New())
+}
+
+func (p Path) XXH64() []byte {
+	return p.hashFile(xxhash.New())
+}
+
+func (p Path) hashFileString(h hash.Hash) string {
+	if s := p.hashFile(h); len(s) > 0 {
+		return hex.EncodeToString(s)
+	}
+	return ""
+}
+
+func (p Path) MD5String() string {
+	return p.hashFileString(md5.New())
+}
+
+func (p Path) SHA1String() string {
+	return p.hashFileString(sha1.New())
+}
+
+func (p Path) SHA256String() string {
+	return p.hashFileString(sha256.New())
+}
+
+func (p Path) XXH64String() string {
+	return p.hashFileString(xxhash.New())
 }
 
 type Usage struct {
