@@ -2119,3 +2119,123 @@ func TestSegments(t *testing.T) {
 		}
 	}
 }
+
+func TestTotalSize(t *testing.T) {
+	// Test regular file
+	t.Run("RegularFile", func(t *testing.T) {
+		p := New("testfile_totalsize.txt")
+		content := []byte("test content for size")
+		if err := p.WriteFile(content); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		defer p.Delete()
+
+		size, err := p.TotalSize()
+		if err != nil {
+			t.Fatalf("TotalSize() error: %v", err)
+		}
+
+		expected := int64(len(content))
+		if size != expected {
+			t.Errorf("expected %d, got %d", expected, size)
+		}
+	})
+
+	// Test directory with files
+	t.Run("DirectoryWithFiles", func(t *testing.T) {
+		dir := New("testdir_totalsize")
+		if err := dir.MkdirIfNotExist(); err != nil {
+			t.Fatalf("MkdirIfNotExist: %v", err)
+		}
+		defer dir.Delete()
+
+		// Create files in directory
+		file1 := dir.Join("file1.txt")
+		content1 := []byte("content1")
+		if err := file1.WriteFile(content1); err != nil {
+			t.Fatalf("WriteFile file1: %v", err)
+		}
+
+		file2 := dir.Join("file2.txt")
+		content2 := []byte("content2 is longer")
+		if err := file2.WriteFile(content2); err != nil {
+			t.Fatalf("WriteFile file2: %v", err)
+		}
+
+		totalSize, err := dir.TotalSize()
+		if err != nil {
+			t.Fatalf("TotalSize() error: %v", err)
+		}
+
+		// Total should be dir size + file1 size + file2 size
+		dirInfo, _ := dir.Stat()
+		expectedMin := dirInfo.Size() + int64(len(content1)) + int64(len(content2))
+		if totalSize < expectedMin {
+			t.Errorf("expected at least %d, got %d", expectedMin, totalSize)
+		}
+	})
+
+	// Test nested directory structure
+	t.Run("NestedDirectories", func(t *testing.T) {
+		dir := New("testdir_nested_totalsize")
+		if err := dir.MkdirIfNotExist(); err != nil {
+			t.Fatalf("MkdirIfNotExist: %v", err)
+		}
+		defer dir.Delete()
+
+		// Create nested structure
+		subdir := dir.Join("subdir")
+		if err := subdir.MkdirIfNotExist(); err != nil {
+			t.Fatalf("MkdirIfNotExist subdir: %v", err)
+		}
+
+		file1 := dir.Join("top.txt")
+		content1 := []byte("top level")
+		if err := file1.WriteFile(content1); err != nil {
+			t.Fatalf("WriteFile top: %v", err)
+		}
+
+		file2 := subdir.Join("nested.txt")
+		content2 := []byte("nested content")
+		if err := file2.WriteFile(content2); err != nil {
+			t.Fatalf("WriteFile nested: %v", err)
+		}
+
+		totalSize, err := dir.TotalSize()
+		if err != nil {
+			t.Fatalf("TotalSize() error: %v", err)
+		}
+
+		// Total should include both directories and both files
+		dirInfo, _ := dir.Stat()
+		subdirInfo, _ := subdir.Stat()
+		expectedMin := dirInfo.Size() + subdirInfo.Size() + int64(len(content1)) + int64(len(content2))
+		if totalSize < expectedMin {
+			t.Errorf("expected at least %d, got %d", expectedMin, totalSize)
+		}
+	})
+}
+
+func TestTotalSizeX(t *testing.T) {
+	dir := New("testdir_totalsizex")
+	if err := dir.MkdirIfNotExist(); err != nil {
+		t.Fatalf("MkdirIfNotExist: %v", err)
+	}
+	defer dir.Delete()
+
+	file := dir.Join("test.txt")
+	content := []byte("test content")
+	if err := file.WriteFile(content); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	totalSize := dir.TotalSizeX()
+	if totalSize == 0 {
+		t.Error("expected non-zero total size")
+	}
+
+	// Should be at least the size of the file
+	if totalSize < int64(len(content)) {
+		t.Errorf("expected at least %d, got %d", int64(len(content)), totalSize)
+	}
+}

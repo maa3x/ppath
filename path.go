@@ -610,6 +610,50 @@ func (p Path) SizeX() int64 {
 	return size
 }
 
+// TotalSize returns the size of the file. For directories, it recursively
+// calculates the total size including all entries.
+func (p Path) TotalSize() (int64, error) {
+	fi, err := p.Stat()
+	if err != nil {
+		return 0, err
+	}
+
+	// For regular files, return the file size
+	if fi.Mode().IsRegular() {
+		return fi.Size(), nil
+	}
+
+	if !fi.IsDir() {
+		// For other types (symlinks, devices, etc.), return just the size
+		return fi.Size(), nil
+	}
+
+	// For directories, calculate total size recursively
+	total := fi.Size()
+
+	entries, err := p.ReadDir()
+	if err != nil {
+		return 0, fmt.Errorf("read directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		entryPath := p.Join(entry.Name())
+		size, err := entryPath.TotalSize()
+		if err != nil {
+			return 0, fmt.Errorf("get size of %s: %w", entry.Name(), err)
+		}
+		total += size
+	}
+
+	return total, nil
+}
+
+// TotalSizeX is a convenience method that returns TotalSize() without error.
+func (p Path) TotalSizeX() int64 {
+	size, _ := p.TotalSize()
+	return size
+}
+
 func (p Path) Walk(fn fs.WalkDirFunc) error {
 	return filepath.WalkDir(string(p), fn)
 }
