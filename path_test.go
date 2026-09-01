@@ -1,10 +1,12 @@
 package ppath
 
 import (
+	"archive/zip"
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
 	"io/fs"
 	"log"
 	"os"
@@ -2238,4 +2240,205 @@ func TestTotalSizeX(t *testing.T) {
 	if totalSize < int64(len(content)) {
 		t.Errorf("expected at least %d, got %d", int64(len(content)), totalSize)
 	}
+}
+
+func TestWriteZipArchive(t *testing.T) {
+	t.Run("source does not exist", func(t *testing.T) {
+		tempDir := t.TempDir()
+		src := New(tempDir, "non_existent")
+		zipDst := New(tempDir, "out.zip")
+		if err := src.WriteZipArchive(zipDst); err == nil {
+			t.Error("expected error when source does not exist, got nil")
+		}
+	})
+
+	t.Run("single file archive", func(t *testing.T) {
+		tempDir := t.TempDir()
+		srcFile := New(tempDir, "hello.txt")
+		expectedContent := []byte("hello world zip test")
+		if err := srcFile.WriteFile(expectedContent); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+
+		zipDst := New(tempDir, "single.zip")
+		if err := srcFile.WriteZipArchive(zipDst); err != nil {
+			t.Fatalf("WriteZipArchive failed: %v", err)
+		}
+
+		if !zipDst.Exists() {
+			t.Fatal("expected zip file to exist")
+		}
+
+		r, err := zip.OpenReader(zipDst.String())
+		if err != nil {
+			t.Fatalf("zip.OpenReader failed: %v", err)
+		}
+		defer r.Close()
+
+		if len(r.File) != 1 {
+			t.Fatalf("expected 1 file in zip, got %d", len(r.File))
+		}
+
+		f := r.File[0]
+		if f.Name != "hello.txt" {
+			t.Errorf("expected entry name %q, got %q", "hello.txt", f.Name)
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatalf("failed to open zip file entry: %v", err)
+		}
+		defer rc.Close()
+
+		data, err := io.ReadAll(rc)
+		if err != nil {
+			t.Fatalf("io.ReadAll failed: %v", err)
+		}
+
+		if string(data) != string(expectedContent) {
+			t.Errorf("expected content %q, got %q", expectedContent, data)
+		}
+	})
+
+	t.Run("directory with nested files and subdirectories", func(t *testing.T) {
+		tempDir := t.TempDir()
+		srcDir := New(tempDir, "test_dir")
+		if err := srcDir.MkdirIfNotExist(); err != nil {
+			t.Fatalf("MkdirIfNotExist failed: %v", err)
+		}
+
+		f1 := srcDir.Join("file1.txt")
+		if err := f1.WriteFile([]byte("content 1")); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+
+		subDir := srcDir.Join("subdir")
+		if err := subDir.MkdirIfNotExist(); err != nil {
+			t.Fatalf("MkdirIfNotExist failed: %v", err)
+		}
+
+		f2 := subDir.Join("file2.txt")
+		if err := f2.WriteFile([]byte("content 2")); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+
+		nestedDir := subDir.Join("nested")
+		if err := nestedDir.MkdirIfNotExist(); err != nil {
+			t.Fatalf("MkdirIfNotExist failed: %v", err)
+		}
+
+		f3 := nestedDir.Join("file3.txt")
+		if err := f3.WriteFile([]byte("content 3")); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+
+		zipDst := New(tempDir, "archive.zip")
+		if err := srcDir.WriteZipArchive(zipDst); err != nil {
+			t.Fatalf("WriteZipArchive failed: %v", err)
+		}
+
+		r, err := zip.OpenReader(zipDst.String())
+		if err != nil {
+			t.Fatalf("zip.OpenReader failed: %v", err)
+		}
+		defer r.Close()
+
+		entries := make(map[string][]byte)
+		for _, f := range r.File {
+			rc, err := f.Open()
+			if err != nil {
+				t.Fatalf("failed to open zip entry %s: %v", f.Name, err)
+			}
+			data, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				t.Fatalf("failed to read zip entry %s: %v", f.Name, err)
+			}
+			entries[f.Name] = data
+		}
+
+		expectedFiles := map[string]string{
+			"file1.txt":               "content 1",
+			"subdir/file2.txt":        "content 2",
+			"subdir/nested/file3.txt": "content 3",
+		}
+
+		for name, expectedContent := range expectedFiles {
+			content, ok := entries[name]
+			if !ok {
+				t.Errorf("expected entry %q not found in zip", name)
+				continue
+			}
+			if string(content) != expectedContent {
+				t.Errorf("entry %q: expected content %q, got %q", name, expectedContent, string(content))
+			}
+		}
+
+		// Ensure directory entries exist
+		if _, ok := entries["subdir/"]; !ok {
+			t.Error("expected directory entry 'subdir/' in zip")
+		}
+		if _, ok := entries["subdir/nested/"]; !ok {
+			t.Error("expected directory entry 'subdir/nested/' in zip")
+		}
+	})
+
+	t.Run("zip file inside source directory is skipped", func(t *testing.T) {
+		tempDir := t.TempDir()
+		srcDir := New(tempDir, "self_zip_dir")
+		if err := srcDir.MkdirIfNotExist(); err != nil {
+			t.Fatalf("MkdirIfNotExist failed: %v", err)
+		}
+
+		if err := srcDir.Join("data.txt").WriteFile([]byte("data")); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+
+		zipDst := srcDir.Join("output.zip")
+		if err := srcDir.WriteZipArchive(zipDst); err != nil {
+			t.Fatalf("WriteZipArchive failed: %v", err)
+		}
+
+		r, err := zip.OpenReader(zipDst.String())
+		if err != nil {
+			t.Fatalf("zip.OpenReader failed: %v", err)
+		}
+		defer r.Close()
+
+		for _, f := range r.File {
+			if f.Name == "output.zip" {
+				t.Errorf("zip archive contains itself: %s", f.Name)
+			}
+		}
+	})
+
+	t.Run("destination zip already exists", func(t *testing.T) {
+		tempDir := t.TempDir()
+		srcFile := New(tempDir, "file.txt")
+		if err := srcFile.WriteFile([]byte("hello")); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+
+		existingZip := New(tempDir, "existing.zip")
+		if err := existingZip.WriteFile([]byte("dummy")); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+
+		if err := srcFile.WriteZipArchive(existingZip); err == nil {
+			t.Error("expected error when destination zip already exists, got nil")
+		}
+	})
+
+	t.Run("invalid zip destination", func(t *testing.T) {
+		tempDir := t.TempDir()
+		srcFile := New(tempDir, "file.txt")
+		if err := srcFile.WriteFile([]byte("hello")); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+
+		invalidZipDst := New("")
+		if err := srcFile.WriteZipArchive(invalidZipDst); err == nil {
+			t.Error("expected error for invalid zip destination, got nil")
+		}
+	})
 }
