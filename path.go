@@ -3,6 +3,7 @@ package ppath
 import (
 	"archive/zip"
 	"crypto/md5"
+	"crypto/rand"
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
@@ -55,21 +56,46 @@ func ThisDir() Path {
 	return WD()
 }
 
-func Temp(dirs ...string) Path {
-	f, err := TempFile("", dirs...)
-	if err != nil {
-		return New()
+const base32alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+
+func applyMask(in string) string {
+	if strings.ContainsRune(in, os.PathSeparator) {
+		in = strings.ReplaceAll(in, string(os.PathSeparator), "_")
 	}
-	f.Close()
-	return New(f.Name())
+
+	before, after, found := strings.CutLast(in, "*")
+	if !found {
+		return in
+	}
+
+	mask := make([]byte, 10)
+	rand.Read(mask)
+	for i := range mask {
+		mask[i] = base32alphabet[mask[i]%32]
+	}
+	return before + string(mask) + after
 }
 
-func TempFile(pattern string, dirs ...string) (*os.File, error) {
-	return os.CreateTemp(filepath.Join(dirs...), pattern)
+// Temp creates new Path with platform's temp directory as prefix.
+// If a part includes a "*", a random string replaces the last "*".
+func Temp(parts ...any) Path {
+	normalized := make([]string, len(parts))
+	for i := range parts {
+		normalized[i] = applyMask(toString(parts[i]))
+	}
+
+	return New(prepend(os.TempDir(), normalized)...)
 }
 
-func TempDir(dirs ...string) Path {
-	return New(append([]string{os.TempDir()}, dirs...)...)
+func TempFile(parts ...any) (*os.File, error) {
+	return Temp(parts...).Create()
+}
+
+// TempDir creates new Path inside the platform's temporary directory. then creates the directory.
+func TempDir(parts ...any) (Path, error) {
+	p := Temp(parts...)
+	err := p.MkdirIfNotExist()
+	return p, err
 }
 
 func (p Path) String() string {
@@ -84,17 +110,8 @@ func (p Path) StringP() *string {
 	return (*string)(&p)
 }
 
-func (p Path) Join(v ...string) Path {
-	return Path(filepath.Join(append([]string{string(p)}, v...)...))
-}
-
-func (p Path) JoinPath(v ...Path) Path {
-	s := make([]string, len(v))
-	for i := range v {
-		s[i] = string(v[i])
-	}
-
-	return p.Join(s...)
+func (p Path) Join(v ...any) Path {
+	return New(prepend(string(p), toStrings(v))...)
 }
 
 func (p Path) Base() Path {
@@ -104,7 +121,7 @@ func (p Path) Base() Path {
 func (p Path) BaseWithoutExt() Path {
 	base := p.Base()
 	segs := strings.Split(string(base), ".")
-	if len(segs) == 1 || (len(segs) == 2 && segs[0] == "") {
+	if len(segs) == 1 || len(segs) == 2 && segs[0] == "" {
 		return base
 	}
 	return Path(strings.Join(segs[:len(segs)-1], "."))
@@ -126,6 +143,10 @@ func (p Path) Ext() Path {
 	return Path(filepath.Ext(string(p)))
 }
 
+func (p Path) AddExt[T ~string](ext T) Path {
+	return p + "." + Path(strings.TrimPrefix(string(ext), "."))
+}
+
 func (p Path) Split() (dir, file Path) {
 	p1, p2 := filepath.Split(string(p))
 	return Path(p1), Path(p2)
@@ -135,7 +156,7 @@ func (p Path) Segments() []string {
 	return filepath.SplitList(string(p))
 }
 
-func (p Path) Rel(r Path) (Path, error) {
+func (p Path) Rel[T ~string](r T) (Path, error) {
 	rel, err := filepath.Rel(string(r), string(p))
 	return Path(rel), err
 }
@@ -149,12 +170,12 @@ func (p Path) Abs() (Path, error) {
 	return Path(abs), err
 }
 
-func (p Path) IsChildOf(parent Path) bool {
+func (p Path) IsChildOf[T ~string](parent T) bool {
 	return strings.HasPrefix(string(p), string(parent))
 }
 
-func (p Path) IsParentOf(child Path) bool {
-	return child.IsChildOf(p)
+func (p Path) IsParentOf[T ~string](child T) bool {
+	return Path(child).IsChildOf(p)
 }
 
 func (p Path) Delete() error {
@@ -165,19 +186,20 @@ func (p Path) Remove() error {
 	return p.Delete()
 }
 
-func (p Path) Rename(n string) error {
-	if err := Path(n).Dir().MkdirIfNotExist(); err != nil {
+func (p Path) Rename[T ~string](n T) error {
+	if err := Path(n).MakeParentDirIfNotExist(); err != nil {
 		return fmt.Errorf("create parent directory: %w", err)
 	}
-	return os.Rename(string(p), n)
+	return os.Rename(string(p), string(n))
 }
 
-func (p Path) Copy(dst Path) error {
+func (p Path) Copy[T ~string](dst T) error {
+	dp := Path(dst)
 	if p.IsDir() {
-		if err := dst.MkdirIfNotExist(); err != nil {
+		if err := dp.MkdirIfNotExist(); err != nil {
 			return err
 		}
-		return os.CopyFS(string(dst), os.DirFS(string(p)))
+		return os.CopyFS(string(dp), os.DirFS(string(p)))
 	}
 
 	src, err := p.Open()
@@ -186,19 +208,20 @@ func (p Path) Copy(dst Path) error {
 	}
 	defer src.Close()
 
-	if dst.IsDir() {
-		dst = dst.JoinPath(p.Base())
+	if dp.IsDir() {
+		dp = dp.Join(p.Base())
 	}
-	if err := dst.Dir().MkdirIfNotExist(); err != nil {
+	if err := dp.MakeParentDirIfNotExist(); err != nil {
 		return fmt.Errorf("create parent directory: %w", err)
 	}
-	dest, err := dst.OpenFile(os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+
+	f, err := dp.OpenFile(os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		return err
 	}
-	defer dest.Close()
+	defer f.Close()
 
-	_, err = io.Copy(dest, src)
+	_, err = io.Copy(f, src)
 	return err
 }
 
@@ -207,37 +230,38 @@ func (p Path) Copy(dst Path) error {
 //   - If p is a file and dst is a directory: moves p into dst
 //   - If p is a file and dst is a file: replaces dst with p
 //   - If p is a directory and dst is a directory: recursively merges contents
-func (p Path) MergeMove(dst Path) error {
+func (p Path) MergeMove[T ~string](dst T) error {
 	if !p.Exists() {
 		return errz.E("source file does not exist")
 	}
 
-	if !dst.Exists() {
-		if err := dst.Dir().MkdirIfNotExist(); err != nil {
+	dstP := Path(dst)
+	if !dstP.Exists() {
+		if err := dstP.MakeParentDirIfNotExist(); err != nil {
 			return errz.E(err, "create parent directory")
 		}
-		if err := os.Rename(string(p), string(dst)); err != nil {
+		if err := os.Rename(string(p), string(dstP)); err != nil {
 			return errz.E(err, "rename file")
 		}
 		return nil
 	}
 
 	if p.IsRegular() {
-		if dst.IsDir() {
-			dst = dst.JoinPath(p.Base())
-			if err := os.Rename(string(p), string(dst)); err != nil {
+		if dstP.IsDir() {
+			dstP = dstP.Join(p.Base())
+			if err := os.Rename(string(p), string(dstP)); err != nil {
 				return errz.E(err, "rename file")
 			}
 			return nil
 		}
-		if !dst.IsRegular() {
+		if !dstP.IsRegular() {
 			return errz.E("destination is not a regular file")
 		}
 
-		if err := dst.Delete(); err != nil {
+		if err := dstP.Delete(); err != nil {
 			return errz.E(err, "delete old file")
 		}
-		if err := os.Rename(string(p), string(dst)); err != nil {
+		if err := os.Rename(string(p), string(dstP)); err != nil {
 			return errz.E(err, "rename file")
 		}
 		return nil
@@ -246,7 +270,7 @@ func (p Path) MergeMove(dst Path) error {
 	if !p.IsDir() {
 		return errz.E("source must be a regular file or directory")
 	}
-	if !dst.IsDir() {
+	if !dstP.IsDir() {
 		return errz.E("destination is not a directory")
 	}
 
@@ -257,7 +281,7 @@ func (p Path) MergeMove(dst Path) error {
 	for i := range entries {
 		entryName := entries[i].Name()
 		srcPath := p.Join(entryName)
-		dstPath := dst.Join(entryName)
+		dstPath := dstP.Join(entryName)
 		if err := srcPath.MergeMove(dstPath); err != nil {
 			return errz.E(err, "move file", "name", entryName)
 		}
@@ -266,16 +290,16 @@ func (p Path) MergeMove(dst Path) error {
 	return p.Delete()
 }
 
-func (p Path) Move(dst Path) error {
+func (p Path) Move[T ~string](dst T) error {
 	if !p.IsExist() {
 		return errz.E("source file does not exist")
 	}
 
-	if err := dst.Dir().MkdirIfNotExist(); err != nil {
+	if err := Path(dst).MakeParentDirIfNotExist(); err != nil {
 		return fmt.Errorf("make parent directory: %w", err)
 	}
 
-	return p.Rename(dst.String())
+	return p.Rename(string(dst))
 }
 
 func (p Path) Truncate() error {
@@ -303,7 +327,7 @@ func (p Path) OpenFile(flag int, perm os.FileMode) (*os.File, error) {
 	if p.IsDir() {
 		return nil, errz.E("can not open a directory")
 	}
-	if err := p.Dir().MkdirIfNotExist(); err != nil {
+	if err := p.MakeParentDirIfNotExist(); err != nil {
 		return nil, fmt.Errorf("create parent directory: %w", err)
 	}
 	return os.OpenFile(string(p), flag, perm)
@@ -322,7 +346,7 @@ func (p Path) Create() (*os.File, error) {
 		return nil, errz.E("already exists")
 	}
 
-	if err := p.Dir().MkdirIfNotExist(); err != nil {
+	if err := p.MakeParentDirIfNotExist(); err != nil {
 		return nil, fmt.Errorf("create parent directory: %w", err)
 	}
 
@@ -339,6 +363,10 @@ func (p Path) MkdirIfNotExist() error {
 	}
 
 	return nil
+}
+
+func (p Path) MakeParentDirIfNotExist() error {
+	return p.Dir().MkdirIfNotExist()
 }
 
 func (p Path) ReadDir() ([]fs.DirEntry, error) {
@@ -363,36 +391,37 @@ func (p Path) ReadJSON() (any, error) {
 		return nil, err
 	}
 	defer f.Close()
+
 	var v any
 	err = json.NewDecoder(f).Decode(&v)
 	return v, err
 }
 
 func (p Path) ReadFrom(r io.Reader) (int64, error) {
-	dest, err := p.Create()
+	f, err := p.Create()
 	if err != nil {
 		return 0, err
 	}
-	defer dest.Close()
+	defer f.Close()
 
-	return dest.ReadFrom(r)
+	return f.ReadFrom(r)
 }
 
-func (p Path) ReadFromPath(p2 Path) (int64, error) {
-	src, err := p2.Open()
+func (p Path) ReadFromPath[T ~string](src T) (int64, error) {
+	f, err := Path(src).Open()
 	if err != nil {
 		return 0, err
 	}
-	defer src.Close()
+	defer f.Close()
 
-	return p.ReadFrom(src)
+	return p.ReadFrom(f)
 }
 
 func (p Path) WriteFile(data []byte) error {
 	if p.IsDir() {
 		return errz.E("can not write to a directory")
 	}
-	if err := p.Dir().MkdirIfNotExist(); err != nil {
+	if err := p.MakeParentDirIfNotExist(); err != nil {
 		return fmt.Errorf("create parent directory: %w", err)
 	}
 	return os.WriteFile(string(p), data, 0o644)
@@ -408,24 +437,36 @@ func (p Path) WriteJSON(v any) error {
 	return json.NewEncoder(f).Encode(v)
 }
 
+func (p Path) WriteIndentedJSON(v any) error {
+	f, err := p.OpenFile(os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	if err != nil {
+		return errz.E(err, "open file")
+	}
+	defer f.Close()
+
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	return enc.Encode(v)
+}
+
 func (p Path) WriteTo(w io.Writer) (int64, error) {
-	src, err := p.Open()
+	f, err := p.Open()
 	if err != nil {
 		return 0, err
 	}
-	defer src.Close()
+	defer f.Close()
 
-	return src.WriteTo(w)
+	return f.WriteTo(w)
 }
 
-func (p Path) WriteToPath(p2 Path) error {
-	dest, err := p2.Create()
+func (p Path) WriteToPath[T ~string](target T) error {
+	f, err := Path(target).Create()
 	if err != nil {
 		return err
 	}
-	defer dest.Close()
+	defer f.Close()
 
-	_, err = p.WriteTo(dest)
+	_, err = p.WriteTo(f)
 	return err
 }
 
@@ -486,8 +527,8 @@ func (p Path) DoesNotExist() bool {
 	return !p.IsExist()
 }
 
-func (p Path) IsEqual(p2 Path) bool {
-	if p == p2 {
+func (p Path) IsEqual[T ~string](target T) bool {
+	if p == Path(target) {
 		return true
 	}
 
@@ -495,7 +536,7 @@ func (p Path) IsEqual(p2 Path) bool {
 	if err != nil {
 		return false
 	}
-	ab2, err := p2.Abs()
+	ab2, err := Path(target).Abs()
 	if err != nil {
 		return false
 	}
@@ -551,26 +592,26 @@ func (p Path) IsEmpty() bool {
 	return size == 0
 }
 
-func (p Path) HasPrefix(prefix string) bool {
-	return strings.HasPrefix(string(p), prefix)
+func (p Path) HasPrefix[T ~string](prefix T) bool {
+	return strings.HasPrefix(string(p), string(prefix))
 }
 
-func (p Path) HasSuffix(suffix string) bool {
-	return strings.HasSuffix(string(p), suffix)
+func (p Path) HasSuffix[T ~string](suffix T) bool {
+	return strings.HasSuffix(string(p), string(suffix))
 }
 
-func (p Path) HasExt(ext string) bool {
+func (p Path) HasExt[T ~string](ext T) bool {
 	if ext == "" {
 		return true
 	}
 	if ext[0] != '.' {
 		ext = "." + ext
 	}
-	return strings.HasSuffix(string(p), ext)
+	return strings.HasSuffix(string(p), string(ext))
 }
 
-func (p Path) Contains(sub string) bool {
-	return strings.Contains(string(p), sub)
+func (p Path) Contains[T ~string](sub T) bool {
+	return strings.Contains(string(p), string(sub))
 }
 
 func (p Path) Trim() Path {
@@ -789,12 +830,12 @@ func (p Path) Usage() (u Usage, err error) {
 	}, nil
 }
 
-func (p Path) WriteZipArchive(zipFilePath Path) (retErr error) {
+func (p Path) WriteZipArchive[T ~string](zipFilePath T) (retErr error) {
 	if !p.Exists() {
 		return errz.E("src directory does not exist")
 	}
 
-	zipFile, err := zipFilePath.Create()
+	zipFile, err := Path(zipFilePath).Create()
 	if err != nil {
 		return errz.E("create zip file", err)
 	}
@@ -879,5 +920,27 @@ func toString(v any) string {
 	if v == nil {
 		return ""
 	}
-	return fmt.Sprint(v)
+
+	switch _v := v.(type) {
+	case string:
+		return _v
+	case Path:
+		return string(_v)
+	case fmt.Stringer:
+		return _v.String()
+	default:
+		return fmt.Sprint(v)
+	}
+}
+
+func toStrings(values []any) []string {
+	parts := make([]string, len(values))
+	for i := range values {
+		parts[i] = toString(values[i])
+	}
+	return parts
+}
+
+func prepend[S ~[]E, E any](p E, values S) S {
+	return append(S{p}, values...)
 }

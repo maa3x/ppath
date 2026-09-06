@@ -11,7 +11,7 @@ import (
 func getTimes(path string) (created, modified, accessed time.Time) {
 	info, err := os.Stat(path)
 	if err != nil {
-		return
+		return created, modified, accessed
 	}
 	modified = info.ModTime()
 	created = modified
@@ -24,5 +24,5 @@ func getTimes(path string) (created, modified, accessed time.Time) {
 			created = time.Unix(int64(stat.Ctimespec.Sec), int64(stat.Ctimespec.Nsec))
 		}
 	}
-	return
+	return created, modified, accessed
 }

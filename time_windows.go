@@ -11,14 +11,14 @@ import (
 func getTimes(path string) (created, modified, accessed time.Time) {
 	handle, err := openHandle(path)
 	if err != nil {
-		return
+		return created, modified, accessed
 	}
 	defer windows.CloseHandle(handle)
 
 	var cTime, aTime, wTime windows.Filetime
 	err = windows.GetFileTime(handle, &cTime, &aTime, &wTime)
 	if err != nil {
-		return
+		return created, modified, accessed
 	}
 	return time.Unix(0, cTime.Nanoseconds()), time.Unix(0, wTime.Nanoseconds()), time.Unix(0, aTime.Nanoseconds())
 }

@@ -10,15 +10,21 @@ linters:
   default: all
   disable:
     - cyclop
-    - errcheck
+    - dogsled
+    - err113
+    - exhaustive
     - exhaustruct
+    - exhaustruct_v5
+    - gochecknoglobals
     - gocyclo
+    - gomodguard
     - nlreturn
     - noinlineerr
     - nonamedreturns
-    - wrapcheck
+    - varnamelen
     - wsl
     - wsl_v5
+    - wrapcheck
   settings:
     embeddedstructfieldcheck:
       empty-line: false
@@ -32,8 +38,16 @@ linters:
         - var
         - type
         - func
+    depguard:
+      rules:
+        logger:
+          deny:
+            - pkg: github.com/sirupsen/logrus
+              desc: logging is allowed only by zap.
+            - pkg: github.com/pkg/errors
+              desc: Should be replaced by standard lib errors package.
     dupl:
-      threshold: 150
+      threshold: 250
     errchkjson:
       check-error-free-encoding: true
       report-no-exported: true
@@ -48,24 +62,26 @@ linters:
       forbid:
         - pattern: ^print(ln)?$
         - pattern: ^fmt\.Print.*$
-        - pattern: ^log\..*$
     funlen:
       lines: 250
-      statements: 60
+      statements: 75
+    gocognit:
+      min-complexity: 40
     goconst:
       min-len: 3
-      min-occurrences: 4
+      min-occurrences: 7
     gocritic:
       disabled-checks:
         - whyNoLint
+      settings:
+        hugeParam:
+          sizeThreshold: 176
       enable-all: true
-    gocyclo:
-      min-complexity: 30
     godoclint:
       default: all
       options:
         max-len:
-          length: 110
+          length: 120
       disable:
         - require-pkg-doc
         - require-doc
@@ -84,13 +100,21 @@ linters:
     govet:
       enable-all: true
       disable:
-        - shadow
+        - fieldalignment
     iface:
       enable:
         - identical # Identifies interfaces in the same package that have identical method sets.
         - unused # Identifies interfaces that are not used anywhere in the same package where the interface is defined.
         - opaque # Identifies functions that return interfaces, but the actual returned value is always a single concrete implementation.
         - unexported # Identifies interfaces that are not exported but are used in exported functions or methods.
+    ireturn:
+      allow:
+        - generic
+        - error
+        - any
+        - anon
+        - empty
+        - stdlib
     lll:
       line-length: 200
     misspell:
@@ -121,6 +145,7 @@ linters:
         - '1e9'
       ignored-functions:
         - (.*).IntRange
+        - helpers.Chance
         - int
         - int16
         - int32
@@ -134,6 +159,8 @@ linters:
         - uint32
         - uint64
         - uint8
+    nestif:
+      min-complexity: 6
     nilnil:
       detect-opposite: true
     nolintlint:
@@ -141,85 +168,45 @@ linters:
       require-specific: true
       allow-unused: false
     revive:
+      enable-all-rules: true
       rules:
+        - name: add-constant
+          disabled: true
         - name: argument-limit
           arguments:
             - 5
-        - name: atomic
-        - name: blank-imports
-        - name: bool-literal-in-expr
-        - name: call-to-gc
-        - name: comment-spacings
         - name: confusing-naming
-        - name: confusing-results
-        - name: constant-logical-expr
-        - name: context-as-argument
-        - name: context-keys-type
-        - name: datarace
-        - name: deep-exit
-        - name: defer
-        - name: dot-imports
-        - name: duplicated-imports
-        - name: early-return
-        - name: empty-block
+          disabled: true
+        - name: cyclomatic
+          disabled: true
+        - name: cognitive-complexity
+          disabled: true
         - name: enforce-map-style
           arguments:
             - make
         - name: enforce-repeated-arg-type-style
           arguments:
             - short
-        - name: error-naming
-        - name: error-return
-        - name: error-strings
-        - name: errorf
+        - name: exported
+          arguments:
+            - disable-stuttering-check
         - name: function-result-limit
           arguments:
             - 3
-        - name: get-return
-        - name: identical-branches
-        - name: identical-ifelseif-branches
-        - name: identical-ifelseif-conditions
-        - name: identical-switch-branches
-        - name: identical-switch-conditions
-        - name: if-return
+        - name: function-length
+          disabled: true
         - name: import-shadowing
-        - name: increment-decrement
-        - name: indent-error-flow
-        - name: max-control-nesting
-          arguments:
-            - 4
-        - name: modifies-parameter
-        - name: nested-structs
-        - name: modifies-value-receiver
-        - name: optimize-operands-order
-        - name: package-directory-mismatch
-        - name: range
-        - name: range-val-address
-        - name: receiver-naming
-        - name: redefines-builtin-id
-        - name: redundant-import-alias
-        - name: redundant-test-main-exit
-        - name: string-format
-        - name: string-of-int
-        - name: struct-tag
-        - name: superfluous-else
-        - name: time-date
-        - name: time-equal
-        - name: time-naming
-        - name: unchecked-type-assertion
-        - name: unconditional-recursion
+          disabled: true
+        - name: line-length-limit
+          disabled: true
+        - name: max-public-structs
+          disabled: true
         - name: unexported-return
           disabled: true
-        - name: unnecessary-stmt
-        - name: unreachable-code
-        - name: unused-parameter
+        - name: unhandled-error
+          disabled: true
         - name: unused-receiver
           disabled: true
-        - name: use-any
-        - name: use-waitgroup-go
-        - name: useless-break
-        - name: useless-fallthrough
-        - name: waitgroup-by-value
     spancheck:
       checks:
         - end
@@ -233,14 +220,50 @@ linters:
       case:
         rules:
           json: snake
-    varnamelen:
-      max-distance: 10
+    wrapcheck:
+      ignore-package-globs:
+        - github.com/maa3x/errz
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
 formatters:
   enable:
     - gofmt
     - gofumpt
     - goimports
   settings:
+    gofmt:
+      simplify: true
+      rewrite-rules:
+        - pattern: 'interface{}'
+          replacement: 'any'
+        - pattern: '(a)'
+          replacement: 'a'
+        - pattern: 'a[b:len(a)]'
+          replacement: 'a[b:]'
+        - pattern: 'strings.Replace(a, b, c, -1)'
+          replacement: 'strings.ReplaceAll(a, b, c)'
+        - pattern: 'bytes.Compare(a, b) == 0'
+          replacement: 'bytes.Equal(a, b)'
+        - pattern: 'bytes.Compare(a, b) != 0'
+          replacement: '!bytes.Equal(a, b)'
     gofumpt:
       module-path: github.com/maa3x/ppath
-      extra-rules: true
+      extra:
+        group-params: true
+        clothe-returns: true
+        balance-calls: true
+    goimports:
+      local-prefixes:
+        - github.com/maa3x/ppath
+  exclusions:
+    generated: lax
+    paths:
+      - (.+)_test\.go
+      - third_party$
+      - builtin$
+      - examples$

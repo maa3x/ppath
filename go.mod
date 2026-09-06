@@ -1,6 +1,6 @@
 module github.com/maa3x/ppath
 
-go 1.26.5
+go 1.27
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0

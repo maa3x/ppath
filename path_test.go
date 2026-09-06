@@ -2,6 +2,7 @@ package ppath
 
 import (
 	"archive/zip"
+	"bytes"
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -250,13 +252,7 @@ func TestWalk(t *testing.T) {
 		p.Join("file2.txt").String(),
 	}
 	for _, ef := range expectedFiles {
-		found := false
-		for _, f := range files {
-			if f == ef {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(files, ef)
 		if !found {
 			t.Errorf("expected file %s to be found", ef)
 		}
@@ -275,7 +271,7 @@ func TestReadFile(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if string(content) != string(testContent) {
+	if !bytes.Equal(content, testContent) {
 		t.Errorf("expected %s, got %s", testContent, content)
 	}
 
@@ -426,31 +422,6 @@ func TestOpenFile(t *testing.T) {
 	_, err = nonExistentFile.OpenFile(os.O_RDWR, 0o644)
 	if err == nil {
 		t.Errorf("expected error, got nil")
-	}
-}
-
-func TestJoinP(t *testing.T) {
-	p := New("a", "b")
-	p1 := New("c")
-	p2 := New("d", "e")
-	result := p.JoinPath(p1, p2)
-	expected := filepath.Join("a", "b", "c", "d", "e")
-	if result.String() != expected {
-		t.Errorf("expected %s, got %s", expected, result.String())
-	}
-
-	// Test with no additional paths
-	result = p.JoinPath()
-	expected = filepath.Join("a", "b")
-	if result.String() != expected {
-		t.Errorf("expected %s, got %s", expected, result.String())
-	}
-
-	// Test with one additional path
-	result = p.JoinPath(p1)
-	expected = filepath.Join("a", "b", "c")
-	if result.String() != expected {
-		t.Errorf("expected %s, got %s", expected, result.String())
 	}
 }
 
@@ -707,7 +678,7 @@ func TestRename(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadFile: %v", err)
 		}
-		if string(dstContent) != string(testContent) {
+		if !bytes.Equal(dstContent, testContent) {
 			t.Errorf("expected %s, got %s", testContent, dstContent)
 		}
 	})
@@ -737,7 +708,7 @@ func TestRename(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadFile: %v", err)
 		}
-		if string(dstContent) != string(testContent) {
+		if !bytes.Equal(dstContent, testContent) {
 			t.Errorf("expected %s, got %s", testContent, dstContent)
 		}
 	})
@@ -772,7 +743,7 @@ func TestRename(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadFile: %v", err)
 		}
-		if string(dstContent) != string(testContent) {
+		if !bytes.Equal(dstContent, testContent) {
 			t.Errorf("expected %s, got %s", testContent, dstContent)
 		}
 	})
@@ -800,7 +771,7 @@ func TestCopy(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadFile: %v", err)
 		}
-		if string(dstContent) != string(testContent) {
+		if !bytes.Equal(dstContent, testContent) {
 			t.Errorf("expected %s, got %s", testContent, dstContent)
 		}
 	})
@@ -827,7 +798,7 @@ func TestCopy(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadFile: %v", err)
 		}
-		if string(dstContent) != string(testContent) {
+		if !bytes.Equal(dstContent, testContent) {
 			t.Errorf("expected %s, got %s", testContent, dstContent)
 		}
 	})
@@ -859,7 +830,7 @@ func TestCopy(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadFile: %v", err)
 		}
-		if string(dstContent) != string(testContent) {
+		if !bytes.Equal(dstContent, testContent) {
 			t.Errorf("expected %s, got %s", testContent, dstContent)
 		}
 	})
@@ -890,7 +861,7 @@ func TestMove(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadFile: %v", err)
 		}
-		if string(dstContent) != string(testContent) {
+		if !bytes.Equal(dstContent, testContent) {
 			t.Errorf("expected %s, got %s", testContent, dstContent)
 		}
 	})
@@ -920,7 +891,7 @@ func TestMove(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadFile: %v", err)
 		}
-		if string(dstContent) != string(testContent) {
+		if !bytes.Equal(dstContent, testContent) {
 			t.Errorf("expected %s, got %s", testContent, dstContent)
 		}
 	})
@@ -955,7 +926,7 @@ func TestMove(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadFile: %v", err)
 		}
-		if string(dstContent) != string(testContent) {
+		if !bytes.Equal(dstContent, testContent) {
 			t.Errorf("expected %s, got %s", testContent, dstContent)
 		}
 	})
@@ -1007,7 +978,7 @@ func TestOpenOrCreate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
 	}
-	if string(readContent) != string(content) {
+	if !bytes.Equal(readContent, content) {
 		t.Errorf("expected %s, got %s", content, readContent)
 	}
 }
@@ -1389,7 +1360,7 @@ func TestMergeMove_MoveFileToExistingDirectory(t *testing.T) {
 	}
 
 	// The moved file should now be at dstDir joined with base name of srcPath.
-	movedFile := dstDir.JoinPath(srcPath.Base())
+	movedFile := dstDir.Join(srcPath.Base())
 	if srcPath.Exists() {
 		t.Errorf("expected source file to be moved")
 	}
@@ -1431,7 +1402,7 @@ func TestMergeMove_MoveFileToExistingFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
 	}
-	if string(result) != string(srcContent) {
+	if !bytes.Equal(result, srcContent) {
 		t.Errorf("expected destination file content %q, got %q", srcContent, result)
 	}
 }
@@ -1705,7 +1676,7 @@ func TestReadFromPath(t *testing.T) {
 			t.Fatalf("ReadFile: %v", err)
 		}
 
-		if string(dstContent) != string(testContent) {
+		if !bytes.Equal(dstContent, testContent) {
 			t.Errorf("expected %s, got %s", testContent, dstContent)
 		}
 	})
@@ -1756,7 +1727,7 @@ func TestWriteToPath(t *testing.T) {
 			t.Fatalf("ReadFile: %v", err)
 		}
 
-		if string(dstContent) != string(testContent) {
+		if !bytes.Equal(dstContent, testContent) {
 			t.Errorf("expected %s, got %s", testContent, dstContent)
 		}
 	})
@@ -2096,8 +2067,10 @@ func TestTempFile(t *testing.T) {
 }
 
 func TestTempDir(t *testing.T) {
-	p := TempDir("subdir", "nested")
-
+	p, err := TempDir("subdir", "nested")
+	if err != nil {
+		t.Errorf("failed to create temp directory: %v", err)
+	}
 	if !p.Contains("subdir") {
 		t.Errorf("expected path to contain 'subdir'")
 	}
@@ -2295,7 +2268,7 @@ func TestWriteZipArchive(t *testing.T) {
 			t.Fatalf("io.ReadAll failed: %v", err)
 		}
 
-		if string(data) != string(expectedContent) {
+		if !bytes.Equal(data, expectedContent) {
 			t.Errorf("expected content %q, got %q", expectedContent, data)
 		}
 	})
