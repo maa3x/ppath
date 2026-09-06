@@ -26,8 +26,8 @@ import (
 
 type Path string
 
-func New(v ...string) Path {
-	return Path(filepath.Join(v...))
+func New[T ~string](v ...T) Path {
+	return Path(filepath.Join(toStrings(v)...))
 }
 
 // ThisFile retrieves the path of the source file from which it was invoked.
@@ -78,21 +78,21 @@ func applyMask(in string) string {
 
 // Temp creates new Path with platform's temp directory as prefix.
 // If a part includes a "*", a random string replaces the last "*".
-func Temp(parts ...any) Path {
+func Temp[T ~string](parts ...T) Path {
 	normalized := make([]string, len(parts))
 	for i := range parts {
-		normalized[i] = applyMask(toString(parts[i]))
+		normalized[i] = applyMask(string(parts[i]))
 	}
 
 	return New(prepend(os.TempDir(), normalized)...)
 }
 
-func TempFile(parts ...any) (*os.File, error) {
+func TempFile[T ~string](parts ...T) (*os.File, error) {
 	return Temp(parts...).Create()
 }
 
 // TempDir creates new Path inside the platform's temporary directory. then creates the directory.
-func TempDir(parts ...any) (Path, error) {
+func TempDir[T ~string](parts ...T) (Path, error) {
 	p := Temp(parts...)
 	err := p.MkdirIfNotExist()
 	return p, err
@@ -110,7 +110,7 @@ func (p Path) StringP() *string {
 	return (*string)(&p)
 }
 
-func (p Path) Join(v ...any) Path {
+func (p Path) Join[T ~string](v ...T) Path {
 	return New(prepend(string(p), toStrings(v))...)
 }
 
@@ -933,10 +933,10 @@ func toString(v any) string {
 	}
 }
 
-func toStrings(values []any) []string {
+func toStrings[T ~string](values []T) []string {
 	parts := make([]string, len(values))
 	for i := range values {
-		parts[i] = toString(values[i])
+		parts[i] = string(values[i])
 	}
 	return parts
 }

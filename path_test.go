@@ -2045,7 +2045,7 @@ func TestXXH64String(t *testing.T) {
 }
 
 func TestTemp(t *testing.T) {
-	p := Temp()
+	p := Temp[string]()
 	defer p.Delete()
 
 	if p.String() == "" {
