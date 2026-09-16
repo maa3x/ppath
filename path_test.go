@@ -85,10 +85,10 @@ func TestSplit(t *testing.T) {
 }
 
 func TestRel(t *testing.T) {
-	p := New("a", "b", "c", "d")
-	r := New("a", "b")
+	p := New("a", "b")
+	c := New("a", "b", "c", "d")
 	expected := filepath.Join("c", "d")
-	rel, err := p.Rel(r)
+	rel, err := p.Rel(c)
 	if err != nil || rel.String() != expected {
 		t.Errorf("expected %s, got %s, error: %v", expected, rel.String(), err)
 	}

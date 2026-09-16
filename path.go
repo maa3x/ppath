@@ -156,8 +156,8 @@ func (p Path) Segments() []string {
 	return filepath.SplitList(string(p))
 }
 
-func (p Path) Rel[T ~string](r T) (Path, error) {
-	rel, err := filepath.Rel(string(r), string(p))
+func (p Path) Rel[T ~string](child T) (Path, error) {
+	rel, err := filepath.Rel(string(p), string(child))
 	return Path(rel), err
 }
 
@@ -830,6 +830,10 @@ func (p Path) Usage() (u Usage, err error) {
 	}, nil
 }
 
+func (p Path) ToSlash() string {
+	return filepath.ToSlash(string(p))
+}
+
 func (p Path) WriteZipArchive[T ~string](zipFilePath T) (retErr error) {
 	if !p.Exists() {
 		return errz.E("src directory does not exist")
@@ -840,15 +844,27 @@ func (p Path) WriteZipArchive[T ~string](zipFilePath T) (retErr error) {
 		return errz.E("create zip file", err)
 	}
 	defer func() {
+		hadErr := retErr != nil
 		if err := zipFile.Close(); err != nil && retErr == nil {
 			retErr = errz.E("close zip file", err)
 		}
+		if hadErr {
+			retErr = errz.Join(retErr, Path(zipFilePath).Remove())
+		}
 	}()
 
-	archive := zip.NewWriter(zipFile)
+	return p.ZipWriteTo(zipFile)
+}
+
+func (p Path) ZipWriteTo(w io.Writer) (retErr error) {
+	if !p.Exists() {
+		return errz.E("path does not exist")
+	}
+
+	archive := zip.NewWriter(w)
 	defer func() {
 		if err := archive.Close(); err != nil && retErr == nil {
-			retErr = errz.E("close zip archive writer", err)
+			retErr = errz.E("close zip writer", err)
 		}
 	}()
 
@@ -861,18 +877,19 @@ func (p Path) WriteZipArchive[T ~string](zipFilePath T) (retErr error) {
 		if err != nil {
 			return errz.E("create zip header from file info", err)
 		}
-		return p.writeZipFile(string(p.Base()), archive, header)
+
+		return p.writeToZip(p.Base(), archive, header)
 	}
 
 	walkErr := p.Walk(func(path string, d fs.DirEntry, itemErr error) error {
 		if itemErr != nil {
 			return errz.E("walk item error", itemErr)
 		}
-		if path == string(p) || path == string(zipFilePath) {
+		if path == string(p) {
 			return nil
 		}
 
-		relPath, err := filepath.Rel(string(p), path)
+		relPath, err := p.Rel(path)
 		if err != nil {
 			return errz.E("calculate relative path", err)
 		}
@@ -887,14 +904,14 @@ func (p Path) WriteZipArchive[T ~string](zipFilePath T) (retErr error) {
 		}
 
 		if d.IsDir() {
-			header.Name = filepath.ToSlash(relPath) + "/"
+			header.Name = relPath.ToSlash() + "/"
 			if _, err := archive.CreateHeader(header); err != nil {
 				return errz.E("create zip directory header", err)
 			}
 			return nil
 		}
 
-		return Path(path).writeZipFile(relPath, archive, header)
+		return Path(path).writeToZip(relPath, archive, header)
 	})
 	if walkErr != nil {
 		return errz.E("walk directory for zip archive", walkErr)
@@ -903,14 +920,14 @@ func (p Path) WriteZipArchive[T ~string](zipFilePath T) (retErr error) {
 	return nil
 }
 
-func (p Path) writeZipFile(relPath string, archive *zip.Writer, header *zip.FileHeader) error {
+func (p Path) writeToZip[T ~string](relPath T, archive *zip.Writer, header *zip.FileHeader) error {
 	header.Method = zip.Deflate
-	header.Name = filepath.ToSlash(relPath)
+	header.Name = filepath.ToSlash(string(relPath))
 	w, err := archive.CreateHeader(header)
 	if err != nil {
 		return errz.E("create zip file header", err)
 	}
-	if _, err := Path(p).WriteTo(w); err != nil {
+	if _, err := p.WriteTo(w); err != nil {
 		return errz.E("write file content to zip", err)
 	}
 	return nil
