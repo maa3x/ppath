@@ -635,6 +635,31 @@ func (p Path) Normalize() Path {
 	return p.Clean()
 }
 
+func (p Path) Glob[T ~string](parts ...T) ([]Path, error) {
+	matches, err := filepath.Glob(string(p.Join(parts...)))
+	if err != nil {
+		return nil, err
+	}
+
+	paths := make([]Path, len(matches))
+	for i := range matches {
+		paths[i] = Path(matches[i])
+	}
+	return paths, nil
+}
+
+func (p Path) SameFile[T ~string](p2 T) bool {
+	p1Info, err := p.Stat()
+	if err != nil {
+		return false
+	}
+	p2Info, err := Path(p2).Stat()
+	if err != nil {
+		return false
+	}
+	return os.SameFile(p1Info, p2Info)
+}
+
 func (p Path) Stat() (fs.FileInfo, error) {
 	return os.Stat(string(p))
 }
@@ -861,6 +886,11 @@ func (p Path) ZipWriteTo(w io.Writer) (retErr error) {
 		return errz.E("path does not exist")
 	}
 
+	var destInfo fs.FileInfo
+	if f, ok := w.(interface{ Stat() (fs.FileInfo, error) }); ok {
+		destInfo, _ = f.Stat()
+	}
+
 	archive := zip.NewWriter(w)
 	defer func() {
 		if err := archive.Close(); err != nil && retErr == nil {
@@ -872,6 +902,9 @@ func (p Path) ZipWriteTo(w io.Writer) (retErr error) {
 		stat, err := p.Stat()
 		if err != nil {
 			return errz.E("read file stat", err)
+		}
+		if destInfo != nil && os.SameFile(stat, destInfo) {
+			return nil
 		}
 		header, err := zip.FileInfoHeader(stat)
 		if err != nil {
@@ -889,15 +922,19 @@ func (p Path) ZipWriteTo(w io.Writer) (retErr error) {
 			return nil
 		}
 
+		info, err := d.Info()
+		if err != nil {
+			return errz.E("get file info", err)
+		}
+		if destInfo != nil && os.SameFile(info, destInfo) {
+			return nil
+		}
+
 		relPath, err := p.Rel(path)
 		if err != nil {
 			return errz.E("calculate relative path", err)
 		}
 
-		info, err := d.Info()
-		if err != nil {
-			return errz.E("get file info", err)
-		}
 		header, err := zip.FileInfoHeader(info)
 		if err != nil {
 			return errz.E("create zip header from file info", err)

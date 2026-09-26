@@ -206,6 +206,151 @@ func TestMatch(t *testing.T) {
 	}
 }
 
+func TestGlob(t *testing.T) {
+	tempDir := t.TempDir()
+	p := New(tempDir)
+
+	f1 := p.Join("file1.txt")
+	f2 := p.Join("file2.txt")
+	f3 := p.Join("file3.go")
+	subDir := p.Join("sub")
+	f4 := subDir.Join("file4.txt")
+
+	if err := subDir.MkdirIfNotExist(); err != nil {
+		t.Fatalf("failed to create subdir: %v", err)
+	}
+	for _, f := range []Path{f1, f2, f3, f4} {
+		if err := f.WriteFile([]byte("test")); err != nil {
+			t.Fatalf("failed to write test file: %v", err)
+		}
+	}
+
+	t.Run("matching files in root directory", func(t *testing.T) {
+		matches, err := p.Glob("*.txt")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(matches) != 2 {
+			t.Fatalf("expected 2 matches, got %d", len(matches))
+		}
+		if !slices.Contains(matches, f1) || !slices.Contains(matches, f2) {
+			t.Errorf("expected %v and %v in matches, got %v", f1, f2, matches)
+		}
+	})
+
+	t.Run("matching with multiple parts", func(t *testing.T) {
+		matches, err := p.Glob("sub", "*.txt")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(matches) != 1 || matches[0] != f4 {
+			t.Errorf("expected [%v], got %v", f4, matches)
+		}
+	})
+
+	t.Run("no matches returns empty slice", func(t *testing.T) {
+		matches, err := p.Glob("*.md")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(matches) != 0 {
+			t.Errorf("expected 0 matches, got %d", len(matches))
+		}
+	})
+
+	t.Run("glob without arguments on pattern path", func(t *testing.T) {
+		matches, err := p.Join("*.go").Glob[string]()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(matches) != 1 || matches[0] != f3 {
+			t.Errorf("expected [%v], got %v", f3, matches)
+		}
+	})
+
+	t.Run("generic type constraint", func(t *testing.T) {
+		type customString string
+		matches, err := p.Glob(customString("*.go"))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(matches) != 1 || matches[0] != f3 {
+			t.Errorf("expected [%v], got %v", f3, matches)
+		}
+	})
+
+	t.Run("invalid pattern returns error", func(t *testing.T) {
+		_, err := p.Glob("[")
+		if err == nil {
+			t.Errorf("expected error for invalid glob pattern, got nil")
+		}
+	})
+}
+
+func TestSameFile(t *testing.T) {
+	tempDir := t.TempDir()
+	p := New(tempDir)
+
+	f1 := p.Join("file1.txt")
+	f2 := p.Join("file2.txt")
+	subDir := p.Join("sub")
+	f1Alias := subDir.Join("..", "file1.txt")
+
+	if err := subDir.MkdirIfNotExist(); err != nil {
+		t.Fatalf("failed to create subdir: %v", err)
+	}
+	if err := f1.WriteFile([]byte("hello")); err != nil {
+		t.Fatalf("failed to write f1: %v", err)
+	}
+	if err := f2.WriteFile([]byte("world")); err != nil {
+		t.Fatalf("failed to write f2: %v", err)
+	}
+
+	t.Run("identical path", func(t *testing.T) {
+		if !f1.SameFile(f1) {
+			t.Errorf("expected %v to be same file as itself", f1)
+		}
+	})
+
+	t.Run("different paths resolving to same file", func(t *testing.T) {
+		if !f1.SameFile(f1Alias) {
+			t.Errorf("expected %v and %v to be recognized as same file", f1, f1Alias)
+		}
+		if !f1Alias.SameFile(f1) {
+			t.Errorf("expected %v and %v to be recognized as same file", f1Alias, f1)
+		}
+	})
+
+	t.Run("different files", func(t *testing.T) {
+		if f1.SameFile(f2) {
+			t.Errorf("expected %v and %v to be different files", f1, f2)
+		}
+	})
+
+	t.Run("non-existent paths", func(t *testing.T) {
+		nonExistent := p.Join("does_not_exist.txt")
+		if f1.SameFile(nonExistent) {
+			t.Errorf("expected existing and non-existing to return false")
+		}
+		if nonExistent.SameFile(f1) {
+			t.Errorf("expected non-existing and existing to return false")
+		}
+		if nonExistent.SameFile(nonExistent) {
+			t.Errorf("expected non-existing paths to return false")
+		}
+	})
+
+	t.Run("symlink to file", func(t *testing.T) {
+		symlink := p.Join("symlink_to_f1.txt")
+		if err := os.Symlink(f1.String(), symlink.String()); err != nil {
+			t.Skipf("symlinks not supported: %v", err)
+		}
+		if !f1.SameFile(symlink) {
+			t.Errorf("expected file %v and symlink %v to report same file", f1, symlink)
+		}
+	})
+}
+
 func TestVolumeName(t *testing.T) {
 	p := New("C:\\path\\to\\file")
 	expected := ""
